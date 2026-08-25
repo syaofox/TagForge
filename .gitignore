@@ -12,3 +12,4 @@ exports/
 
 # 其它
 .DS_Store
+.shots/
