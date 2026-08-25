@@ -1,0 +1,12 @@
+services:
+  tagforge:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - TZ=Asia/Shanghai
+    volumes:
+      - ./datasets:/app/datasets
+      - ./config:/app/config
+      - ./exports:/app/exports
+    restart: unless-stopped

@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 运行时数据（不入库）
+datasets/
+config/
+exports/
+*.zip
+
+# 其它
+.DS_Store
