@@ -50,6 +50,7 @@ DEFAULT_SETTINGS = {
     "prefix_mode": "prepend",
     "dark": False,
     "concurrency": 5,
+    "last_project": "",
 }
 
 # 模型预设（名称 -> Base URL / 默认模型）。Claude 需中转站、DeepSeek-VL 需自建端点、Ollama 需 /v1。
@@ -81,6 +82,7 @@ class ImageEntry:
     path: Path
     status: str = "pending"
     thumb: str = ""
+    preview: str = ""  # 详情面板用的大图 data URL（懒加载，非缩略图）
     badge: Optional[ui.element] = None
 
 
@@ -265,6 +267,8 @@ def select_project(name: str) -> None:
         return
     state.current = name
     UI["toolbar_title"].set_text(name)
+    state.settings["last_project"] = name  # 跨重启记住当前项目
+    save_settings()
     background_tasks.create(refresh_grid())
 
 
@@ -309,6 +313,7 @@ def open_detail(i: int) -> None:
     state.index = i
     UI["drawer"].show()
     render_detail()
+    background_tasks.create(load_preview(i))  # 懒加载原图预览
 
 
 def render_detail() -> None:
@@ -319,7 +324,7 @@ def render_detail() -> None:
         with ui.row().classes("w-full items-center justify-between"):
             ui.label(entry.name).classes("font-bold")
             ui.button(icon="close", on_click=drawer.hide).props("flat dense")
-        ui.image(entry.thumb).classes("w-full max-h-96 object-contain")
+        UI["preview_img"] = ui.image(entry.preview or entry.thumb).classes("w-full max-h-96 object-contain")
         state.tagbox = ui.textarea(label="标签文本", value=read_label(state.current, entry.name)) \
             .classes("w-full").props("outlined dense")
         with ui.row():
@@ -366,6 +371,23 @@ async def regenerate() -> None:
     except Exception as e:
         set_badge(entry, "failed")
         ui.notify(f"生成失败：{e}", type="negative")
+
+
+async def load_preview(i: int) -> None:
+    """异步加载原图（缩放后 JPEG）预览，替换缩略图。"""
+    if not state.entries or i >= len(state.entries):
+        return
+    entry = state.entries[i]
+    if entry.preview:
+        return
+    try:
+        data = "data:image/jpeg;base64," + base64.b64encode(
+            await run.io_bound(encode_for_api, entry.path)).decode("ascii")
+    except Exception:
+        return
+    entry.preview = data
+    if state.index == i and UI.get("preview_img") is not None:
+        UI["preview_img"].set_source(data)  # 详情面板仍打开且是同张图时即时替换
 
 
 def prev_img() -> None:
@@ -756,10 +778,11 @@ def build_ui() -> None:
     with ui.column().classes("fixed bottom-2 right-2"):
         UI["tokens"] = ui.label("Tokens：—").classes("text-xs text-gray-400")
 
-    # 初始加载：页面函数运行于活跃 client 与运行中的事件循环内，可直接填充网格
+    # 初始加载：优先恢复上次项目，缺失时回退到第一个项目
     refresh_project_list()
-    if state.projects:
-        state.current = state.projects[0]
+    remembered = state.settings.get("last_project") or ""
+    state.current = remembered if remembered in state.projects else (state.projects[0] if state.projects else None)
+    if state.current:
         UI["toolbar_title"].set_text(state.current)
         background_tasks.create(refresh_grid())
 
