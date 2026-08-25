@@ -240,11 +240,19 @@ def update_tokens() -> None:
 
 
 # ---------------- 徽章 / 状态 ----------------
+def soft_color(hex_color: str, alpha: float = 0.14) -> str:
+    """把 #rrggbb 转成低透明度 rgba，用于浅色徽章底色。"""
+    h = hex_color.lstrip("#")
+    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+    return f"rgba({r},{g},{b},{alpha})"
+
+
 def set_badge(entry: ImageEntry, status: str) -> None:
     entry.status = status
     if entry.badge is not None:
         entry.badge.set_text(STATUS_TEXT[status])
-        entry.badge.style(f"background-color:{STATUS_COLOR[status]}")
+        entry.badge.style(f"background:{soft_color(STATUS_COLOR[status])}; color:{STATUS_COLOR[status]};")
+        entry.badge.classes(remove="tf-badge-solid")
 
 
 # ---------------- 项目 / 网格 ----------------
@@ -257,8 +265,13 @@ def refresh_project_list() -> None:
             ui.label("暂无项目").classes("text-sm text-gray-400")
         else:
             for name in state.projects:
-                ui.button(name, on_click=lambda n=name: select_project(n)) \
-                    .props("flat dense align-left").classes("w-full justify-start")
+                active = name == state.current
+                b = ui.button(name, on_click=lambda n=name: select_project(n)) \
+                    .props("dense align-left").classes("w-full justify-start rounded-lg")
+                if active:
+                    b.props("unelevated color=primary").classes("text-white")
+                else:
+                    b.props("flat ").classes("tf-muted")
 
 
 def select_project(name: str) -> None:
@@ -269,6 +282,7 @@ def select_project(name: str) -> None:
     UI["toolbar_title"].set_text(name)
     state.settings["last_project"] = name  # 跨重启记住当前项目
     save_settings()
+    refresh_project_list()  # 刷新选中态
     background_tasks.create(refresh_grid())
 
 
@@ -277,7 +291,7 @@ async def refresh_grid() -> None:
     grid.clear()
     if not state.current:
         with grid:
-            ui.label("请先在左侧选择或新建一个项目。").classes("text-gray-400")
+            ui.label("😶 请先在左侧选择或新建一个项目。").classes("tf-muted py-10")
         return
 
     imgs = project_images(state.current)
@@ -295,15 +309,16 @@ async def refresh_grid() -> None:
 
     with grid:
         for i, entry in enumerate(entries):
-            card = ui.card().classes("w-full h-60 cursor-pointer overflow-hidden") \
+            card = ui.card().props("flat") \
+                .classes("tf-card") \
                 .mark("image-card") \
                 .on("click", lambda i=i: open_detail(i))
             with card:
-                ui.image(entry.thumb).classes("w-full h-40 object-cover")
-                ui.label(entry.name).classes("text-xs text-gray-500 truncate w-full")
-                entry.badge = ui.label(STATUS_TEXT[entry.status]).classes(
-                    "px-2 py-0.5 rounded text-white text-xs")
-                entry.badge.style(f"background-color:{STATUS_COLOR[entry.status]}")
+                with ui.element("div").classes("tf-card-inner relative"):
+                    ui.image(entry.thumb).classes("tf-card-img")
+                    entry.badge = ui.label(STATUS_TEXT[entry.status]).classes("tf-badge")
+                    entry.badge.style(f"background:{soft_color(STATUS_COLOR[entry.status])}; color:{STATUS_COLOR[entry.status]};")
+                ui.label(entry.name).classes("tf-card-name")
 
 
 # ---------------- 详情面板 ----------------
@@ -321,20 +336,27 @@ def render_detail() -> None:
     drawer.clear()
     entry = state.entries[state.index]
     with drawer:
-        with ui.row().classes("w-full items-center justify-between"):
-            ui.label(entry.name).classes("font-bold")
-            ui.button(icon="close", on_click=drawer.hide).props("flat dense")
-        UI["preview_img"] = ui.image(entry.preview or entry.thumb).classes("w-full max-h-96 object-contain")
-        state.tagbox = ui.textarea(label="标签文本", value=read_label(state.current, entry.name)) \
-            .classes("w-full").props("outlined dense")
-        with ui.row():
-            ui.button("保存", on_click=save_tag).props("color=green-7")
-            ui.button("重新生成", on_click=regenerate).props("color=blue-7")
-            ui.button("删除图片", on_click=confirm_delete).props("color=red-7")
-        with ui.row().classes("w-full items-center justify-between"):
-            ui.button(icon="navigate_before", on_click=prev_img).props("flat round")
-            ui.label(f"{state.index + 1} / {len(state.entries)}").classes("self-center")
-            ui.button(icon="navigate_next", on_click=next_img).props("flat round")
+        with ui.column().classes("w-full gap-3 p-5"):
+            with ui.row().classes("w-full items-center justify-between"):
+                with ui.column().classes("gap-0"):
+                    ui.label(entry.name).classes("tf-text font-bold")
+                    ui.label("◀ ▶ 可切换上一张 / 下一张").classes("tf-muted text-xs")
+                ui.button(icon="close", on_click=drawer.hide).props("flat round color=grey-7")
+            UI["preview_img"] = ui.image(entry.preview or entry.thumb) \
+                .classes("w-full max-h-96 object-contain rounded-xl")
+            state.tagbox = ui.textarea(label="标签文本", value=read_label(state.current, entry.name)) \
+                .classes("w-full").props("outlined dense")
+            with ui.row().classes("w-full gap-2"):
+                ui.button("保存", icon="save", on_click=save_tag) \
+                    .props("unelevated rounded color=green-7").classes("flex-1")
+                ui.button("重新生成", icon="auto_awesome", on_click=regenerate) \
+                    .props("unelevated rounded color=blue-7").classes("flex-1")
+                ui.button("删除图片", icon="delete", on_click=confirm_delete) \
+                    .props("flat rounded color=red-6").classes("shrink-0")
+            with ui.row().classes("w-full items-center justify-between pt-1"):
+                ui.button(icon="navigate_before", on_click=prev_img).props("round outline color=primary")
+                ui.label(f"{state.index + 1} / {len(state.entries)}").classes("tf-muted text-sm")
+                ui.button(icon="navigate_next", on_click=next_img).props("round outline color=primary")
 
 
 def save_tag() -> None:
@@ -654,16 +676,104 @@ def restore_default_prompt() -> None:
 
 
 # ---------------- 界面构建 ----------------
+CSS = """
+/* ===== TagForge 主题 ===== */
+:root {
+  --tf-primary: #6366f1;
+  --tf-bg: #f2f3f8;
+  --tf-surface: #ffffff;
+  --tf-border: #e7e9f2;
+  --tf-text: #1f2430;
+  --tf-muted: #7b8294;
+}
+.body--dark {
+  --tf-bg: #0e1016;
+  --tf-surface: #161a24;
+  --tf-border: #272c3b;
+  --tf-text: #e6e8f0;
+  --tf-muted: #9aa1b4;
+}
+html, body { background: var(--tf-bg) !important; }
+body { font-family: "Inter", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, -apple-system, sans-serif; }
+
+.tf-text { color: var(--tf-text); }
+.tf-muted { color: var(--tf-muted); }
+
+/* 顶栏 */
+.tf-header {
+  background: linear-gradient(92deg, #4f46e5 0%, #7c3aed 62%, #9333ea 100%) !important;
+  color: #fff;
+  box-shadow: 0 2px 14px rgba(79, 70, 229, .35);
+  height: 56px;
+}
+.tf-logo { letter-spacing: .3px; }
+.tf-tagline { font-size: .72rem; opacity: .8; }
+
+/* 抽屉 */
+.tf-drawer .q-drawer__content { background: var(--tf-surface) !important; }
+.tf-drawer { max-width: 560px; }
+.tf-section { font-size: .72rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--tf-muted); }
+.tf-label { font-size: .72rem; font-weight: 600; color: var(--tf-muted); }
+
+/* 表单圆角 */
+.q-field--outlined .q-field__control { border-radius: 10px !important; }
+
+/* 图片卡片 */
+.tf-card {
+  border-radius: 14px;
+  background: var(--tf-surface) !important;
+  border: 1px solid var(--tf-border) !important;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, .06);
+  padding: 0 !important;
+  overflow: hidden;
+  transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+  cursor: pointer;
+}
+.tf-card:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(16, 24, 40, .14); border-color: #c9cdf1 !important; }
+.tf-card-img { width: 100%; height: 150px; object-fit: cover; display: block; background: #e9ebf3; }
+.body--dark .tf-card-img { background: #20242f; }
+.tf-card-name { font-size: .78rem; font-weight: 600; color: var(--tf-text); padding: .5rem .7rem .55rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tf-badge {
+  position: absolute; top: 8px; right: 8px;
+  font-size: .66rem; font-weight: 600; padding: 3px 9px;
+  border-radius: 999px; letter-spacing: .02em;
+  backdrop-filter: blur(2px);
+  border: 1px solid rgba(255,255,255,.35);
+}
+
+/* 工具栏 */
+.tf-toolbar { border-radius: 14px; background: var(--tf-surface) !important; border: 1px solid var(--tf-border) !important; }
+.tf-toolbar-title { font-size: 1.05rem; font-weight: 700; color: var(--tf-text); }
+.tf-wide { width: 100%; max-width: 1440px; }
+
+/* 进度条 / 弹窗 / 日志 */
+.q-linear-progress { border-radius: 8px; }
+.q-dialog .q-card { border-radius: 18px !important; }
+.tf-log { background: rgba(120, 130, 160, .08); border: 1px solid var(--tf-border); border-radius: 12px; }
+
+/* Token 角落 */
+.tf-token {
+  background: var(--tf-surface); border: 1px solid var(--tf-border); border-radius: 999px;
+  padding: 6px 14px; font-size: .7rem; color: var(--tf-muted);
+  box-shadow: 0 2px 8px rgba(16, 24, 40, .08);
+}
+"""
+
+
 def build_ui() -> None:
     state.settings = load_settings()
     if not SETTINGS_FILE.exists():
         save_settings()  # 首次运行自动创建配置并写入默认值
     UI["dark"] = ui.dark_mode(state.settings.get("dark", False))
+    ui.page_title("TagForge — LoRA 图片打标工具")
 
-    with ui.header().classes("items-center px-4"):
-        with ui.row().classes("items-center gap-2"):
-            ui.label("⚒️ TagForge").classes("text-xl font-bold")
-        with ui.row().classes("ml-auto items-center gap-3"):
+    ui.add_head_html("<style>" + CSS + "</style>")
+
+    with ui.header().classes("tf-header items-center px-5"):
+        with ui.row().classes("items-center gap-3"):
+            ui.label("⚒️ TagForge").classes("tf-logo text-xl font-bold")
+            ui.label("LoRA 数据集图片打标工具").classes("tf-tagline hidden sm:block")
+        with ui.row().classes("ml-auto items-center gap-2"):
             def toggle_dark(e):
                 UI["dark"].enable() if e.value else UI["dark"].disable()
                 set_setting("dark", e.value)
@@ -677,19 +787,21 @@ def build_ui() -> None:
                     with ui.row().classes("justify-end w-full"):
                         ui.button("知道了", on_click=UI["help_dialog"].close).props("flat")
                 UI["help_dialog"].open()
-            ui.button(icon="help_outline", on_click=show_help).props("flat round")
+            ui.button(icon="help_outline", on_click=show_help).props("flat round color=white")
 
     # ---- 左侧面板：项目管理 + 模型配置 ----
-    with ui.left_drawer(value=True, fixed=True).props("bordered").classes("w-80"):
-        ui.label("项目").classes("font-bold text-lg")
-        with ui.row():
-            ui.button("新建项目", on_click=new_project).props("color=primary dense")
-            ui.button("删除项目", on_click=delete_project).props("color=red-6 dense")
-        with ui.column().classes("w-full h-40 overflow-y-auto my-1 gap-1"):
-            UI["project_list"] = ui.column().classes("w-full gap-1")
+    with ui.left_drawer(value=True, fixed=True).props("bordered").classes("tf-drawer w-80"):
+        with ui.column().classes("w-full gap-3 p-4"):
+            ui.label("项目管理").classes("tf-section")
+            ui.button("新建项目", icon="add", on_click=new_project) \
+                .props("unelevated rounded color=primary dense").classes("w-full")
+            with ui.column().classes("w-full h-44 overflow-y-auto gap-1"):
+                UI["project_list"] = ui.column().classes("w-full gap-1")
+            ui.button("删除项目", icon="delete_outline", on_click=delete_project) \
+                .props("flat dense rounded color=red-6").classes("w-full")
 
         ui.separator()
-        ui.label("模型配置").classes("font-bold text-lg")
+        ui.label("模型配置").classes("tf-section")
         with ui.column().classes("w-full gap-1"):
             ui.select(list(MODEL_PRESETS.keys()), label="模型预设", on_change=on_preset_change) \
                 .props("outlined dense").classes("w-full")
@@ -705,18 +817,18 @@ def build_ui() -> None:
                 .on_value_change(lambda e: set_setting("api_key", e.value))
 
             ui.separator()
-            ui.label("打标模式").classes("font-bold")
+            ui.label("打标模式").classes("tf-label")
             ui.radio({"short": "短标签（逗号分隔）", "natural": "自然语言描述"},
                      value=state.settings.get("mode"), on_change=lambda e: set_setting("mode", e.value)) \
                 .props("dense")
 
-            ui.label("System Prompt").classes("font-bold")
+            ui.label("System Prompt").classes("tf-label")
             UI["prompt_textarea"] = ui.textarea(value=state.settings.get("system_prompt")) \
                 .classes("w-full h-32").props("outlined dense") \
                 .on_value_change(lambda e: set_setting("system_prompt", e.value))
             ui.button("恢复默认", on_click=restore_default_prompt).props("flat dense")
 
-            ui.label("触发词前缀").classes("font-bold")
+            ui.label("触发词前缀").classes("tf-label")
             ui.input(value=state.settings.get("tag_prefix")) \
                 .props("outlined dense").classes("w-full") \
                 .on_value_change(lambda e: set_setting("tag_prefix", e.value))
@@ -724,43 +836,54 @@ def build_ui() -> None:
                      value=state.settings.get("prefix_mode"),
                      on_change=lambda e: set_setting("prefix_mode", e.value)).props("dense")
 
-            ui.label("并发数").classes("font-bold")
+            ui.label("并发数").classes("tf-label")
             ui.number(value=state.settings.get("concurrency"), min=1, max=32, step=1) \
                 .props("outlined dense").classes("w-full") \
                 .on_value_change(lambda e: set_setting("concurrency", int(e.value)))
 
             ui.separator()
-            ui.button("打包导出", on_click=export_zip).props("color=teal-7").classes("w-full")
+            ui.button("打包导出", icon="archive", on_click=export_zip) \
+                .props("unelevated rounded color=teal-7").classes("w-full")
 
     # ---- 主区域 ----
-    with ui.column().classes("w-full px-4 gap-2"):
-        with ui.row().classes("w-full items-center gap-3"):
-            UI["toolbar_title"] = ui.label("（未选择项目）").classes("text-lg font-bold")
-            ui.upload(multiple=True, auto_upload=True, on_upload=on_upload) \
-                .props("label=上传图片 flat bordered").classes("w-48")
-            UI["batch_button"] = ui.button("开始批量标注", on_click=start_batch) \
-                .props("color=blue-7").set_enabled(client_ready())
-            UI["main_progress"] = ui.linear_progress(value=0.0, show_value=True) \
-                .classes("w-64").set_visibility(False)
+    with ui.column().classes("w-full items-center px-6 pt-4"):
+        with ui.card().props("flat").classes("tf-toolbar tf-wide px-4 py-2.5"):
+            with ui.row().classes("w-full items-center gap-3 flex-wrap"):
+                UI["toolbar_title"] = ui.label("（未选择项目）").classes("tf-toolbar-title")
+                with ui.element("div").classes("inline-flex"):
+                    UI["uploader"] = ui.upload(multiple=True, auto_upload=True, on_upload=on_upload) \
+                        .classes("hidden")
+                    ui.button("上传图片", icon="upload",
+                              on_click=lambda: UI["uploader"].run_method("pickFiles")) \
+                        .props("unelevated rounded color=indigo-9")
+                UI["batch_button"] = ui.button("开始批量标注", icon="auto_awesome", on_click=start_batch) \
+                    .props("unelevated rounded color=primary").set_enabled(client_ready())
+                UI["main_progress"] = ui.linear_progress(value=0.0, show_value=True) \
+                    .classes("w-56").set_visibility(False)
 
-        UI["grid"] = ui.grid(columns="repeat(auto-fill, minmax(170px, 1fr))").classes("w-full gap-3")
+        with ui.column().classes("w-full items-center pt-4 pb-10"):
+            UI["grid"] = ui.grid(columns="repeat(auto-fill, minmax(190px, 1fr))") \
+                .classes("tf-wide gap-4")
 
     # ---- 右侧详情面板 ----
-    UI["drawer"] = ui.right_drawer(value=False, fixed=True).props("width=40% bordered")
+    UI["drawer"] = ui.right_drawer(value=False, fixed=True).props("width=40% bordered") \
+        .classes("tf-drawer")
 
     # ---- 弹窗 ----
     with ui.dialog() as UI["batch_modal"]:
-        with ui.card().classes("w-120"):
+        with ui.card().props("flat").classes("tf-card gap-3 p-5") \
+                .style("width: 560px; max-width: 92vw;"):
             with ui.row().classes("w-full items-center justify-between"):
-                ui.label("批量标注").classes("text-lg font-bold")
-                ui.button(icon="close", on_click=close_batch_modal).props("flat dense")
-            UI["batch_total"] = ui.label("")
+                ui.label("批量标注").classes("tf-text text-lg font-bold")
+                ui.button(icon="close", on_click=close_batch_modal).props("flat round color=grey-7")
+            UI["batch_total"] = ui.label("").classes("tf-muted text-sm")
             UI["batch_progress"] = ui.linear_progress(value=0.0, show_value=True).classes("w-full")
-            with ui.column().classes("w-full h-64 overflow-y-auto border rounded-lg p-2"):
-                UI["batch_log"] = ui.column().classes("w-full")
+            with ui.column().classes("w-full h-64 overflow-y-auto tf-log p-3"):
+                UI["batch_log"] = ui.column().classes("w-full gap-1")
             with ui.row().classes("w-full items-center justify-between"):
-                ui.button("后台运行", on_click=run_in_background).props("color=primary")
-                ui.button("终止", on_click=stop_batch).props("color=red")
+                ui.button("后台运行", icon="play_arrow", on_click=run_in_background) \
+                    .props("unelevated rounded color=primary")
+                ui.button("终止", icon="stop", on_click=stop_batch).props("unelevated rounded color=red-6")
 
     with ui.dialog() as UI["help_dialog"]:
         pass
@@ -775,8 +898,8 @@ def build_ui() -> None:
         pass
 
     # ---- 右下角 Token 统计 ----
-    with ui.column().classes("fixed bottom-2 right-2"):
-        UI["tokens"] = ui.label("Tokens：—").classes("text-xs text-gray-400")
+    with ui.column().classes("fixed bottom-3 right-3"):
+        UI["tokens"] = ui.label("Tokens：—").classes("tf-token")
 
     # 初始加载：优先恢复上次项目，缺失时回退到第一个项目
     refresh_project_list()
