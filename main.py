@@ -54,6 +54,7 @@ DEFAULT_SETTINGS = {
 
 # 模型预设（名称 -> Base URL / 默认模型）。Claude 需中转站、DeepSeek-VL 需自建端点、Ollama 需 /v1。
 MODEL_PRESETS = {
+    "DeepSeek (官方)": {"base_url": "https://api.deepseek.com", "model": "deepseek-v4-flash-vision-exp"},
     "OpenAI (GPT-4o)": {"base_url": "https://api.openai.com/v1", "model": "gpt-4o-mini"},
     "Claude 3.5（中转站）": {"base_url": "https://api.anthropic.com/v1", "model": "claude-3-5-sonnet-latest"},
     "DeepSeek-VL（自建/中转）": {"base_url": "", "model": "deepseek-vl2"},
