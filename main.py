@@ -124,7 +124,8 @@ def save_settings() -> None:
 def scan_projects() -> list:
     if not DATASETS.is_dir():
         return []
-    return sorted(p.name for p in DATASETS.iterdir() if p.is_dir())
+    # 排除隐藏目录（如缩略图缓存 .cache）与以点开头的目录
+    return sorted(p.name for p in DATASETS.iterdir() if p.is_dir() and not p.name.startswith("."))
 
 
 def images_dir(project: str) -> Path:
@@ -282,7 +283,7 @@ async def refresh_grid() -> None:
     ]
     # 并行生成缩略图（进程池），避免阻塞事件循环
     thumbs = await asyncio.gather(
-        *(run.cpu_bound(make_thumb, state.current, e.name) for e in entries)
+        *(run.io_bound(make_thumb, state.current, e.name) for e in entries)
     )
     for e, t in zip(entries, thumbs):
         e.thumb = t
@@ -291,6 +292,7 @@ async def refresh_grid() -> None:
     with grid:
         for i, entry in enumerate(entries):
             card = ui.card().classes("w-full h-60 cursor-pointer overflow-hidden") \
+                .mark("image-card") \
                 .on("click", lambda i=i: open_detail(i))
             with card:
                 ui.image(entry.thumb).classes("w-full h-40 object-cover")
@@ -305,7 +307,7 @@ def open_detail(i: int) -> None:
     if not state.entries:
         return
     state.index = i
-    UI["drawer"].open()
+    UI["drawer"].show()
     render_detail()
 
 
@@ -316,7 +318,7 @@ def render_detail() -> None:
     with drawer:
         with ui.row().classes("w-full items-center justify-between"):
             ui.label(entry.name).classes("font-bold")
-            ui.button(icon="close", on_click=drawer.close).props("flat dense")
+            ui.button(icon="close", on_click=drawer.hide).props("flat dense")
         ui.image(entry.thumb).classes("w-full max-h-96 object-contain")
         state.tagbox = ui.textarea(label="标签文本", value=read_label(state.current, entry.name)) \
             .classes("w-full").props("outlined dense")
@@ -347,7 +349,7 @@ async def regenerate() -> None:
     set_badge(entry, "processing")
     try:
         data = "data:image/jpeg;base64," + base64.b64encode(
-            await run.cpu_bound(encode_for_api, entry.path)).decode("ascii")
+            await run.io_bound(encode_for_api, entry.path)).decode("ascii")
         tags = await state.client.generate(
             data, state.settings.get("system_prompt", ""), state.settings.get("mode", "short"))
         final = apply_prefix(tags, state.settings.get("tag_prefix", ""),
@@ -403,7 +405,7 @@ def do_delete() -> None:
         return
     (DATASETS / ".cache" / state.current / f"{Path(entry.name).stem}.thumb.jpg").unlink(missing_ok=True)
     ui.notify(f"已删除 {entry.name}")
-    UI["drawer"].close()
+    UI["drawer"].hide()
     background_tasks.create(refresh_grid())
 
 
@@ -490,7 +492,7 @@ async def run_batch(targets: list) -> None:
             t0 = time.perf_counter()
             try:
                 data = "data:image/jpeg;base64," + base64.b64encode(
-                    await run.cpu_bound(encode_for_api, entry.path)).decode("ascii")
+                    await run.io_bound(encode_for_api, entry.path)).decode("ascii")
                 tags = await state.client.generate(data, prop, mode)
                 final = apply_prefix(tags, prefix, prefix_mode)
                 write_label(state.current, entry.name, final)
