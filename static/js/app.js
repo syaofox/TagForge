@@ -123,7 +123,10 @@
   // ---------- 详情抽屉 ----------
   const drawer = $("#detail-drawer");
   function closeDetail() { if (drawer) { drawer.classList.remove("open"); drawer.dataset.name = ""; } }
-  $("#btn-detail-close")?.addEventListener?.("click", closeDetail);
+  // 详情关闭按钮在动态内容里，须用委托
+  document.body.addEventListener("click", (e) => {
+    if (e.target.closest("#btn-detail-close")) closeDetail();
+  });
   document.body.addEventListener("htmx:afterSwap", (e) => {
     if (e.detail && e.detail.target && e.detail.target.id === "detail-drawer") {
       drawer.classList.add("open");
@@ -147,12 +150,23 @@
     });
   });
 
-  // ---------- 再生按钮状态 ----------
-  const genBtn = $("#btn-regenerate");
-  if (genBtn) {
-    genBtn.addEventListener("htmx:beforeRequest", () => { genBtn.disabled = true; genBtn.textContent = "生成中…"; $("#gen-spinner")?.toggleAttribute("hidden", false); });
-    genBtn.addEventListener("htmx:afterRequest", () => { genBtn.disabled = false; genBtn.textContent = "重新生成"; $("#gen-spinner")?.toggleAttribute("hidden", true); });
-  }
+  // ---------- 再生按钮状态（委托：详情内容每次被 htmx 替换，直接绑定会丢失） ----------
+  document.body.addEventListener("htmx:beforeRequest", (e) => {
+    const btn = e.target && e.target.closest ? e.target.closest("#btn-regenerate") : null;
+    if (!btn) return;
+    btn.disabled = true;
+    btn.textContent = "生成中…";
+    const sp = $("#gen-spinner");
+    if (sp) sp.hidden = false;
+  });
+  document.body.addEventListener("htmx:afterRequest", (e) => {
+    const btn = e.target && e.target.closest ? e.target.closest("#btn-regenerate") : null;
+    if (!btn) return;
+    btn.disabled = false;
+    btn.textContent = "重新生成";
+    const sp = $("#gen-spinner");
+    if (sp) sp.hidden = true;
+  });
 
   // ---------- Lightbox ----------
   function openLightbox(src) {
