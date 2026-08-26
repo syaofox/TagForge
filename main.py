@@ -36,97 +36,168 @@ SETTINGS_FILE = CONFIG / "settings.json"
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 
-# 通用默认提示词（短标签 / 自然语言）
+# 通用默认提示词（格式 × 输出语言）
 DEFAULT_PROMPTS = {
-    "short": (
-        "You are an image captioning assistant. "
-        "Generate 5-10 comma-separated tags (danbooru style, lowercase) for the image. "
-        "Output only the tags."
-    ),
-    "natural": (
-        "You are an image captioning assistant. "
-        "Describe the image in one detailed natural-language sentence. "
-        "Output only the sentence."
-    ),
+    "short": {
+        "en": (
+            "You are an image captioning assistant. "
+            "Generate 5-10 comma-separated tags (danbooru style, lowercase) for the image. "
+            "Output only the tags."
+        ),
+        "zh": (
+            "你是一名图像打标助手。请为这张图片生成 5-10 个以中文逗号分隔的关键词标签"
+            "（简洁、具体，如 白色连衣裙、长发、微笑）。只输出标签本身。"
+        ),
+    },
+    "natural": {
+        "en": (
+            "You are an image captioning assistant. "
+            "Describe the image in one detailed natural-language sentence. "
+            "Output only the sentence."
+        ),
+        "zh": (
+            "你是一名图像打标助手。请用一句完整的中文自然语言描述这张图片"
+            "（客观、具体，包含主体、动作、环境与光线）。只输出这句话。"
+        ),
+    },
 }
 
-# 训练场景预设提示词（角色 / 服装 / 风格 × 短标签 / 自然语言）
+# 训练场景预设提示词（训练目标 × 格式 × 输出语言）
 # 依据 LoRA 数据集打标规范整理（见设计文档 11.3 与参考来源）：
 # - 角色：省略固定身份特征（脸/瞳/发/体型，交给触发词吸收），保留服装/姿势/表情/镜头/背景/光线，元素顺序一致；
 # - 服装：服装是主体，具体描述款式/颜色/面料/版型/细节/褶皱，穿者泛化；
 # - 风格：打「内容」不打「风格」，风格词至多 2-3 个稳定词，禁质量词。
 TRAINING_PROMPTS = {
     "character": {
-        "short": (
-            "You are a captioning assistant for CHARACTER LoRA training datasets. "
-            "Generate 5-12 comma-separated danbooru-style tags (lowercase, no underscores). "
-            "Rule: identity must be absorbed by the trigger token, so OMIT features that are "
-            "fixed across the dataset (face shape, eye/hair color, skin, body type). "
-            "INCLUDE: clothing and its details, pose/action, expression, shot type "
-            "(full_body, close-up, ...), background/setting, lighting, and media type "
-            "(1girl, solo, ...). Keep the element order consistent across every image; "
-            "consistency matters more than exhaustive detail. Output only the tags."
-        ),
-        "natural": (
-            "You are a captioning assistant for CHARACTER LoRA training datasets. "
-            "Write ONE natural-language caption (15-35 words) with this fixed element order: "
-            "trigger token first, then media type, shot type of a man/woman, clothing, "
-            "pose/action, expression, background/setting, lighting. OMIT identity features "
-            "fixed across the dataset (face, eye/hair color, skin, body type) so the trigger "
-            "absorbs them. Keep the same element order in every caption; plain factual "
-            "English, no poetic language and no quality words. Output only the caption."
-        ),
+        "short": {
+            "en": (
+                "You are a captioning assistant for CHARACTER LoRA training datasets. "
+                "Generate 5-12 comma-separated danbooru-style tags (lowercase, no underscores). "
+                "Rule: identity must be absorbed by the trigger token, so OMIT features that are "
+                "fixed across the dataset (face shape, eye/hair color, skin, body type). "
+                "INCLUDE: clothing and its details, pose/action, expression, shot type "
+                "(full_body, close-up, ...), background/setting, lighting, and media type "
+                "(1girl, solo, ...). Keep the element order consistent across every image; "
+                "consistency matters more than exhaustive detail. Output only the tags."
+            ),
+            "zh": (
+                "你是角色 LoRA 训练数据集的打标助手。请生成 5-12 个以中文逗号分隔的关键词标签"
+                "。规则：身份特征要交给触发词吸收，因此省略数据集中固定的特征（脸型、瞳色、"
+                "发色、肤色、体型）；必须包含：服装及细节、姿势/动作、表情、镜头类型（全身、"
+                "特写等）、背景/场景、光线、媒介类型（单人、1girl 等）。每张图的标签顺序"
+                "保持一致，一致性比详尽更重要。只输出标签。"
+            ),
+        },
+        "natural": {
+            "en": (
+                "You are a captioning assistant for CHARACTER LoRA training datasets. "
+                "Write ONE natural-language caption (15-35 words) with this fixed element order: "
+                "trigger token first, then media type, shot type of a man/woman, clothing, "
+                "pose/action, expression, background/setting, lighting. OMIT identity features "
+                "fixed across the dataset (face, eye/hair color, skin, body type) so the trigger "
+                "absorbs them. Keep the same element order in every caption; plain factual "
+                "English, no poetic language and no quality words. Output only the caption."
+            ),
+            "zh": (
+                "你是角色 LoRA 训练数据集的打标助手。请用一句 15-35 字的中文自然语言描述"
+                "，按固定顺序组织：触发词在前，然后是媒介类型、人物镜头类型、服装细节、"
+                "姿势/动作、表情、背景/场景、光线。省略数据集中固定的身份特征（脸、瞳色、"
+                "发色、肤色、体型），让触发词吸收它们。每张图保持相同的元素顺序，简明客观"
+                "，不用修饰性语言和质量词。只输出这句话。"
+            ),
+        },
     },
     "clothing": {
-        "short": (
-            "You are a captioning assistant for CLOTHING LoRA training datasets. "
-            "Generate 5-12 comma-separated danbooru-style tags (lowercase, no underscores). "
-            "The garment is the subject: ALWAYS include garment type, color, material/fabric, "
-            "fit and cut (sleeve_length, collar, hem), visible details (buttons, zippers, "
-            "ribbons, embroidery), folds/texture when visible, and how it is worn "
-            "(zipped, tucked, ...). Keep the wearer generic - never describe the person's "
-            "identity. Add view tags when recognizable (front_view, side_view, back_view, "
-            "full_body, close-up, flat_lay). Order: garment, material/color, fit details, "
-            "wearer context, view. Output only the tags."
-        ),
-        "natural": (
-            "You are a captioning assistant for CLOTHING LoRA training datasets. "
-            "Write ONE natural-language caption (10-25 words) describing the garment "
-            "specifically: garment type, color, material/fabric, fit and cut (sleeves, "
-            "collar, hem), visible details (buttons, zippers, folds), how it is worn, and "
-            "the view (front view, close-up, full body). Keep the wearer generic - never "
-            "describe the person's identity. Plain factual English. Output only the caption."
-        ),
+        "short": {
+            "en": (
+                "You are a captioning assistant for CLOTHING LoRA training datasets. "
+                "Generate 5-12 comma-separated danbooru-style tags (lowercase, no underscores). "
+                "The garment is the subject: ALWAYS include garment type, color, material/fabric, "
+                "fit and cut (sleeve_length, collar, hem), visible details (buttons, zippers, "
+                "ribbons, embroidery), folds/texture when visible, and how it is worn "
+                "(zipped, tucked, ...). Keep the wearer generic - never describe the person's "
+                "identity. Add view tags when recognizable (front_view, side_view, back_view, "
+                "full_body, close-up, flat_lay). Order: garment, material/color, fit details, "
+                "wearer context, view. Output only the tags."
+            ),
+            "zh": (
+                "你是服装 LoRA 训练数据集的打标助手。请生成 5-12 个以中文逗号分隔的关键词标签"
+                "。服装是主体：必须包含服装种类（连衣裙、卫衣、皮夹克等）、颜色、面料材质、"
+                "版型剪裁（袖长、领型、下摆）、可见细节（纽扣、拉链、缎带、刺绣）、可见时的"
+                "褶皱/肌理，以及穿着方式（拉上拉链、塞进裤腰等）。穿着者保持泛化，不要描述"
+                "其身份。可辨认时补充视角词（正面、背面、全身、特写、平铺）。顺序：服装→材质"
+                "颜色→版型细节→穿着者场景→视角。只输出标签。"
+            ),
+        },
+        "natural": {
+            "en": (
+                "You are a captioning assistant for CLOTHING LoRA training datasets. "
+                "Write ONE natural-language caption (10-25 words) describing the garment "
+                "specifically: garment type, color, material/fabric, fit and cut (sleeves, "
+                "collar, hem), visible details (buttons, zippers, folds), how it is worn, and "
+                "the view (front view, close-up, full body). Keep the wearer generic - never "
+                "describe the person's identity. Plain factual English. Output only the caption."
+            ),
+            "zh": (
+                "你是服装 LoRA 训练数据集的打标助手。请用一句 10-25 字的中文自然语言描述"
+                "，具体描述服装：种类、颜色、面料材质、版型剪裁（袖子、领口、下摆）、可见"
+                "细节（纽扣、拉链、褶皱）、穿着方式与视角（正面、特写、全身）。穿着者保持"
+                "泛化，不描述其身份。简明客观。只输出这句话。"
+            ),
+        },
     },
     "style": {
-        "short": (
-            "You are a captioning assistant for STYLE / art-style LoRA training datasets. "
-            "Generate 5-12 comma-separated danbooru-style tags (lowercase, no underscores). "
-            "Rule: caption the CONTENT, not the style - describe subjects, scene and "
-            "composition so content never becomes bound to the style. Add at most 2-3 STABLE "
-            "style cues (e.g. lineart, cel_shading, watercolor, rough_sketch, thick_outlines, "
-            "grainy, muted_colors). Avoid generic quality tags (masterpiece, best_quality, 4k). "
-            "Output only the tags."
-        ),
-        "natural": (
-            "You are a captioning assistant for STYLE LoRA training datasets. "
-            "Write ONE natural-language caption describing the CONTENT of the image "
-            "(subjects, scene, composition), not the art style. Keep style words to 2-3 at "
-            "most. No quality terms. Plain factual English. Output only the caption."
-        ),
+        "short": {
+            "en": (
+                "You are a captioning assistant for STYLE / art-style LoRA training datasets. "
+                "Generate 5-12 comma-separated danbooru-style tags (lowercase, no underscores). "
+                "Rule: caption the CONTENT, not the style - describe subjects, scene and "
+                "composition so content never becomes bound to the style. Add at most 2-3 STABLE "
+                "style cues (e.g. lineart, cel_shading, watercolor, rough_sketch, thick_outlines, "
+                "grainy, muted_colors). Avoid generic quality tags (masterpiece, best_quality, 4k). "
+                "Output only the tags."
+            ),
+            "zh": (
+                "你是风格 LoRA 训练数据集的打标助手。请生成 5-12 个以中文逗号分隔的关键词标签"
+                "。规则：打「内容」不打「风格」——描述画面中的主体、场景与构图，避免内容被"
+                "绑定到风格上。风格词最多 2-3 个稳定词（线稿、赛璐璐上色、水彩、厚涂、粗描边"
+                "、颗粒感、低饱和）。避免使用质量词（杰作、最优质量、4k）。只输出标签。"
+            ),
+        },
+        "natural": {
+            "en": (
+                "You are a captioning assistant for STYLE LoRA training datasets. "
+                "Write ONE natural-language caption describing the CONTENT of the image "
+                "(subjects, scene, composition), not the art style. Keep style words to 2-3 at "
+                "most. No quality terms. Plain factual English. Output only the caption."
+            ),
+            "zh": (
+                "你是风格 LoRA 训练数据集的打标助手。请用一句中文自然语言描述画面的内容"
+                "（主体、场景、构图），而不是描述艺术风格。风格词最多 2-3 个。不要使用质量词"
+                "。简明客观。只输出这句话。"
+            ),
+        },
     },
 }
 
-# 提示词预设下拉：value -> 显示名（格式 × 训练目标，取代原「打标模式」单选）
+# 提示词预设下拉：value -> 显示名（输出语言 × 格式 × 训练目标，取代原「打标模式」单选）
 PROMPT_PRESETS = {
-    "short_default": "短标签 · 通用",
-    "natural_default": "自然语言 · 通用",
-    "short_character": "短标签 · 角色 LoRA",
-    "natural_character": "自然语言 · 角色 LoRA",
-    "short_clothing": "短标签 · 服装 LoRA",
-    "natural_clothing": "自然语言 · 服装 LoRA",
-    "short_style": "短标签 · 风格 LoRA",
-    "natural_style": "自然语言 · 风格 LoRA",
+    "en_short_default": "英文 · 短标签 · 通用",
+    "en_natural_default": "英文 · 自然语言 · 通用",
+    "en_short_character": "英文 · 短标签 · 角色 LoRA",
+    "en_natural_character": "英文 · 自然语言 · 角色 LoRA",
+    "en_short_clothing": "英文 · 短标签 · 服装 LoRA",
+    "en_natural_clothing": "英文 · 自然语言 · 服装 LoRA",
+    "en_short_style": "英文 · 短标签 · 风格 LoRA",
+    "en_natural_style": "英文 · 自然语言 · 风格 LoRA",
+    "zh_short_default": "中文 · 短标签 · 通用",
+    "zh_natural_default": "中文 · 自然语言 · 通用",
+    "zh_short_character": "中文 · 短标签 · 角色 LoRA",
+    "zh_natural_character": "中文 · 自然语言 · 角色 LoRA",
+    "zh_short_clothing": "中文 · 短标签 · 服装 LoRA",
+    "zh_natural_clothing": "中文 · 自然语言 · 服装 LoRA",
+    "zh_short_style": "中文 · 短标签 · 风格 LoRA",
+    "zh_natural_style": "中文 · 自然语言 · 风格 LoRA",
     "custom": "自定义",
 }
 
@@ -141,7 +212,7 @@ DEFAULT_SETTINGS = {
     "dark": False,
     "concurrency": 5,
     "last_project": "",
-    "prompt_preset": "short_default",
+    "prompt_preset": "en_short_default",
 }
 
 # 模型预设（名称 -> Base URL / 默认模型）。Claude 需中转站、DeepSeek-VL 需自建端点、Ollama 需 /v1。
@@ -206,21 +277,27 @@ def load_settings() -> dict:
     merged = dict(DEFAULT_SETTINGS)
     merged.update({k: v for k, v in data.items() if k in DEFAULT_SETTINGS})
     # 兼容旧配置：旧值（mode/character/clothing/style/custom）映射到新的「格式 × 目标」键；
-    # 缺省时按提示词内容推断（=某格式默认 => 对应 _default；否则 => custom）。
-    _old_map = {"mode", "character", "clothing", "style", "custom"}
-    if "prompt_preset" in data and data["prompt_preset"] in _old_map:
+    # 兼容旧配置：
+    # - v1 键：mode / character / clothing / style / custom
+    # - v2 键：short_default / natural_* 等（无语言前缀，按英文处理）
+    # - 缺省：按提示词内容推断（=某格式英文默认 => en_<fmt>_default；否则 => custom）
+    _v1 = {"mode", "character", "clothing", "style", "custom"}
+    if "prompt_preset" in data and data["prompt_preset"] in _v1:
         old = data["prompt_preset"]
         if old == "custom":
             merged["prompt_preset"] = "custom"
         elif old == "mode":
-            merged["prompt_preset"] = merged.get("mode", "short") + "_default"
-        else:  # character / clothing / style（旧版均为短标签风格）
-            merged["prompt_preset"] = "short_" + old
+            merged["prompt_preset"] = "en_" + merged.get("mode", "short") + "_default"
+        else:  # character / clothing / style（旧版均为英文短标签风格）
+            merged["prompt_preset"] = "en_short_" + old
+    elif "prompt_preset" in data and not data["prompt_preset"].startswith(("en_", "zh_")):
+        merged["prompt_preset"] = "en_" + data["prompt_preset"]
     elif "prompt_preset" not in data:
         mode = merged.get("mode", "short")
         sp = (merged.get("system_prompt") or "").strip()
         merged["prompt_preset"] = (
-            mode + "_default" if sp == DEFAULT_PROMPTS.get(mode, "").strip() else "custom")
+            "en_" + mode + "_default"
+            if sp == DEFAULT_PROMPTS[mode]["en"].strip() else "custom")
     return merged
 
 
@@ -804,20 +881,20 @@ def on_prompt_text_change(e: events.ValueChangeEventArguments) -> None:
 
 
 def on_prompt_preset_change(e: events.ValueChangeEventArguments) -> None:
-    """选择提示词预设：按「格式 × 训练目标」填充对应提示词；「自定义」保留现有文本。
+    """选择提示词预设：按「输出语言 × 格式 × 训练目标」填充对应提示词；「自定义」保留现有文本。
 
-    预设键形如 <格式>_<目标>，例如 short_character / natural_style。
+    预设键形如 <语言>_<格式>_<目标>，例如 en_short_character / zh_natural_style。
     """
     preset = e.value
     state.settings["prompt_preset"] = preset
     if preset == "custom":
         save_settings()
         return
-    fmt, target = preset.split("_", 1)
+    lang, fmt, target = preset.split("_", 2)
     if target == "default":
-        text = DEFAULT_PROMPTS[fmt]
+        text = DEFAULT_PROMPTS[fmt][lang]
     else:
-        text = TRAINING_PROMPTS[target][fmt]
+        text = TRAINING_PROMPTS[target][fmt][lang]
     state.settings["mode"] = fmt
     set_prompt_text(text)
     state.settings["system_prompt"] = text
@@ -825,14 +902,14 @@ def on_prompt_preset_change(e: events.ValueChangeEventArguments) -> None:
 
 
 def restore_default_prompt() -> None:
-    """恢复为「短标签 · 通用」并填入对应默认提示词。"""
-    state.settings["prompt_preset"] = "short_default"
-    UI["prompt_select"].value = "short_default"
-    set_prompt_text(DEFAULT_PROMPTS["short"])
-    state.settings["system_prompt"] = DEFAULT_PROMPTS["short"]
+    """恢复为「英文 · 短标签 · 通用」并填入对应默认提示词。"""
+    state.settings["prompt_preset"] = "en_short_default"
+    UI["prompt_select"].value = "en_short_default"
+    set_prompt_text(DEFAULT_PROMPTS["short"]["en"])
+    state.settings["system_prompt"] = DEFAULT_PROMPTS["short"]["en"]
     state.settings["mode"] = "short"
     save_settings()
-    ui.notify("已恢复为「短标签 · 通用」默认提示词")
+    ui.notify("已恢复为「英文 · 短标签 · 通用」默认提示词")
 
 
 
