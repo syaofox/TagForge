@@ -1696,13 +1696,13 @@ def build_ui() -> None:
         .classes("tf-drawer")
 
     # ---- 弹窗 ----
-    with ui.dialog() as UI["lightbox_dialog"]:
-        with ui.card().classes("bg-transparent no-shadow"):
+    with ui.dialog().props("maximized") as UI["lightbox_dialog"]:
+        with ui.column().classes("w-full h-full items-center justify-center bg-black") \
+                .on("click", lightbox_close):
             UI["lightbox_img"] = ui.image("") \
                 .props("fit=contain") \
-                .classes("max-w-[94vw] max-h-[90vh] cursor-zoom-out") \
-                .on("click", lightbox_close)
-            ui.label("点击图片或按 Esc 关闭").classes("tf-muted text-xs w-full text-center mt-1")
+                .classes("w-full h-full cursor-zoom-out")
+            ui.label("点击任意处或按 Esc 关闭").classes("tf-muted text-xs")
 
     with ui.dialog() as UI["help_dialog"]:
         pass
