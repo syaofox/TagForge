@@ -529,9 +529,20 @@ def soft_color(hex_color: str, alpha: float = 0.14) -> str:
     return f"rgba({r},{g},{b},{alpha})"
 
 
+def _alive(el) -> bool:
+    """元素仍可用（存在且未被删除）。"""
+    return el is not None and not el.is_deleted
+
+
+def ui_guard(key: str):
+    """返回存活可用的 UI 元素；已删除/不存在返回 None。"""
+    el = UI.get(key)
+    return el if _alive(el) else None
+
+
 def update_card_caption(entry: ImageEntry) -> None:
-    """刷新卡片缩略图下方的标注文字（空则隐藏）。"""
-    if entry.caption is None:
+    """刷新卡片缩略图下方的标注文字（空则隐藏；元素已随网格重建删除则跳过）。"""
+    if not _alive(entry.caption):
         return
     text = read_label(state.current, entry.name).strip()
     entry.caption.set_text(text)
@@ -540,14 +551,14 @@ def update_card_caption(entry: ImageEntry) -> None:
 
 def update_card_frame(entry: ImageEntry) -> None:
     """根据状态刷新卡片描边与 ✓ 角标（P1-8）。"""
-    if entry.card is not None:
+    if _alive(entry.card):
         if entry.status == "tagged":
             entry.card.style("border-color: rgba(34,197,94,.7) !important")
         elif entry.status == "failed":
             entry.card.style("border-color: rgba(239,68,68,.6) !important")
         else:
             entry.card.style("border-color: var(--tf-border) !important")
-    if entry.check is not None:
+    if _alive(entry.check):
         entry.check.set_visibility(entry.status == "tagged")
 
 
@@ -555,7 +566,7 @@ def set_badge(entry: ImageEntry, status: str) -> None:
     entry.status = status
     update_stats()  # 统计条实时联动
     update_card_frame(entry)  # 状态描边/✓ 联动
-    if entry.badge is not None:
+    if _alive(entry.badge):
         entry.badge.set_text(STATUS_TEXT[status])
         entry.badge.style(f"background:{soft_color(STATUS_COLOR[status])}; color:{STATUS_COLOR[status]};")
         entry.badge.classes(remove="tf-badge-solid")
@@ -605,7 +616,7 @@ def compute_stats() -> dict:
 def update_stats() -> None:
     """刷新统计条文字（批量/状态变化时调用）。"""
     el = UI.get("stats_label")
-    if el is None:
+    if not _alive(el):
         return
     c = compute_stats()
     parts = [f"共 {c['all']} 张"]
@@ -955,7 +966,7 @@ async def load_preview(i: int) -> None:
     except Exception:
         return
     entry.preview = data
-    if state.index == i and UI.get("preview_img") is not None:
+    if state.index == i and ui_guard("preview_img") is not None:
         UI["preview_img"].set_source(data)  # 详情面板仍打开且是同张图时即时替换
 
 
@@ -1058,7 +1069,7 @@ def on_multi_upload(e: events.MultiUploadEventArguments) -> None:
 def add_log(text: str) -> None:
     state.batch_log_lines.append(text)
     box = UI.get("batch_log")
-    if box is not None:
+    if _alive(box):
         with box:
             ui.label(text).classes("text-xs font-mono")
 
@@ -1175,11 +1186,17 @@ async def run_batch(targets: list) -> None:
                 add_log(f"{entry.name} ❌ 失败：{e}")
             finally:
                 done += 1
-                UI["batch_progress"].value = done / total
-                UI["main_progress"].value = done / total
-                UI["batch_stats"].set_text(
-                    f"完成 {done}/{total} · ✅ {ok_count} · ❌ {fail_count} · "
-                    f"⏱ {time.perf_counter() - batch_start:.0f}s")
+                bp = ui_guard("batch_progress")
+                if bp is not None:
+                    bp.value = done / total
+                mp = ui_guard("main_progress")
+                if mp is not None:
+                    mp.value = done / total
+                st = ui_guard("batch_stats")
+                if st is not None:
+                    st.set_text(
+                        f"完成 {done}/{total} · ✅ {ok_count} · ❌ {fail_count} · "
+                        f"⏱ {time.perf_counter() - batch_start:.0f}s")
 
     try:
         results = await asyncio.gather(*(process(t) for t in targets), return_exceptions=True)
