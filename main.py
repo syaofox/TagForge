@@ -251,6 +251,8 @@ class ImageEntry:
     label: str = ""  # 标签文本（卡片缩略图下方展示）
     badge: Optional[ui.element] = None
     caption: Optional[ui.element] = None  # 卡片上的标注文字元素
+    card: Optional[ui.element] = None  # 卡片元素（状态描边用）
+    check: Optional[ui.element] = None  # 已标注 ✓ 角标
 
 
 @dataclass
@@ -478,11 +480,20 @@ def ensure_client() -> bool:
 
 
 def update_tokens() -> None:
+    """更新顶栏 Token 统计。"""
     c = state.client
-    if c is None:
-        return
-    inp, out = c.total_prompt_tokens, c.total_completion_tokens
-    UI["tokens"].set_text(f"Tokens：输入 {inp} / 输出 {out}（累计 {inp + out}）")
+    total = (c.total_prompt_tokens + c.total_completion_tokens) if c else 0
+    el = UI.get("header_tokens")
+    if el is not None:
+        el.set_text(f"Tokens：{total}")
+
+
+def update_header_meta() -> None:
+    """顶栏：当前模型名 + Token。"""
+    mdl = UI.get("header_model")
+    if mdl is not None:
+        mdl.set_text(f"模型：{state.settings.get('model', '')}")
+    update_tokens()
 
 
 # ---------------- 徽章 / 状态 ----------------
@@ -502,9 +513,23 @@ def update_card_caption(entry: ImageEntry) -> None:
     entry.caption.set_visibility(bool(text))
 
 
+def update_card_frame(entry: ImageEntry) -> None:
+    """根据状态刷新卡片描边与 ✓ 角标（P1-8）。"""
+    if entry.card is not None:
+        if entry.status == "tagged":
+            entry.card.style("border-color: rgba(34,197,94,.7) !important")
+        elif entry.status == "failed":
+            entry.card.style("border-color: rgba(239,68,68,.6) !important")
+        else:
+            entry.card.style("border-color: var(--tf-border) !important")
+    if entry.check is not None:
+        entry.check.set_visibility(entry.status == "tagged")
+
+
 def set_badge(entry: ImageEntry, status: str) -> None:
     entry.status = status
     update_stats()  # 统计条实时联动
+    update_card_frame(entry)  # 状态描边/✓ 联动
     if entry.badge is not None:
         entry.badge.set_text(STATUS_TEXT[status])
         entry.badge.style(f"background:{soft_color(STATUS_COLOR[status])}; color:{STATUS_COLOR[status]};")
@@ -642,7 +667,11 @@ def render_grid_page() -> None:
                 .classes("tf-card") \
                 .mark("image-card") \
                 .on("click", lambda e0=entry: open_detail(state.entries.index(e0)))
+            entry.card = card
+            update_card_frame(entry)  # 初次渲染即应用状态描边/✓
             with card:
+                entry.check = ui.label("✓").classes("tf-check").style("background:#22c55e")
+                entry.check.set_visibility(entry.status == "tagged")
                 if entry.thumb:
                     ui.image(entry.thumb).classes("tf-card-img")
                 else:
@@ -726,9 +755,11 @@ def render_detail() -> None:
                     ui.label("◀ ▶ 可切换上一张 / 下一张").classes("tf-muted text-xs")
                 ui.button(icon="close", on_click=drawer.hide).props("flat round color=grey-7")
             UI["preview_img"] = ui.image(entry.preview or entry.thumb) \
-                .classes("w-full max-h-96 object-contain rounded-xl")
+                .classes("w-full max-h-96 object-contain rounded-xl cursor-zoom-in") \
+                .on("click", open_lightbox).tooltip("点击放大（Esc 关闭）")
             state.tagbox = ui.textarea(label="标签文本", value=read_label(state.current, entry.name)) \
-                .classes("w-full").props("outlined dense")
+                .classes("w-full").props("outlined dense") \
+                .on("keydown", on_tagbox_keys)  # 文本框内 Ctrl+Enter 保存
             with ui.row().classes("w-full gap-2 items-center"):
                 UI["save_btn"] = ui.button("保存", icon="save", on_click=save_tag) \
                     .props("unelevated rounded color=green-7").classes("flex-1")
@@ -802,6 +833,87 @@ async def regenerate() -> None:
         ui.notify(f"生成失败：{e}", type="negative")
     finally:
         set_generating_ui(False)
+
+
+def open_lightbox() -> None:
+    """详情大图点击放大（P1-9）。"""
+    if not state.entries:
+        return
+    entry = state.entries[state.index]
+    img = UI.get("lightbox_img")
+    if img is None:
+        return
+    img.set_source(entry.preview or entry.thumb)
+    UI["lightbox_dialog"].open()
+
+
+def lightbox_close() -> None:
+    UI["lightbox_dialog"].close()
+
+
+def on_tagbox_keys(e: events.GenericEventArguments) -> None:
+    """详情文本框内的 Ctrl+Enter = 保存（全局 ui.keyboard 默认忽略 textarea 按键）。"""
+    try:
+        a = e.args or {}
+        if a.get("key") == "Enter" and (a.get("ctrlKey") or a.get("metaKey")):
+            save_tag()
+    except Exception:
+        pass
+
+
+def handle_shortcuts(e: events.KeyboardEventArguments) -> None:
+    """全局快捷键：Ctrl+Enter 保存；←/→ 切换图片；Esc 关闭（P1-9）。"""
+    try:
+        key = (e.key or "").lower()
+        mods = e.modifiers or []
+        if key == "escape":
+            UI.get("lightbox_dialog").close()
+            UI["drawer"].hide()
+        elif key == "enter" and any(m in ("ctrl", "control", "meta") for m in mods):
+            save_tag()
+        elif key in ("arrowleft", "arrowright") and UI["drawer"].value:
+            (prev_img if key == "arrowleft" else next_img)()
+    except Exception:
+        pass
+
+
+async def trial_generate() -> None:
+    """试生成 1 张（P1-10）：用当前配置对第一张待标注/失败图跑一次。"""
+    if not state.current:
+        ui.notify("请先选择项目", type="warning")
+        return
+    if not ensure_client():
+        return
+    target = next((e for e in state.entries if e.status in ("pending", "failed")), None)
+    if target is None:
+        ui.notify("没有待标注/失败的图片可试生成", type="info")
+        return
+    btn = UI.get("trial_btn")
+    try:
+        if btn is not None:
+            btn.set_enabled(False)
+        set_badge(target, "processing")
+        data = "data:image/jpeg;base64," + base64.b64encode(
+            await run.io_bound(encode_for_api, target.path)).decode("ascii")
+        tags = await state.client.generate(
+            data, state.settings.get("system_prompt", ""))
+        final = apply_prefix(tags, state.settings.get("tag_prefix", ""),
+                             state.settings.get("prefix_mode", "prepend"))
+        write_label(state.current, target.name, final)
+        set_badge(target, "tagged")
+        update_card_caption(target)
+        update_tokens()
+        ui.notify(f"✅ 试生成成功（{target.name}）：{final[:70]}", type="positive", timeout=6000)
+        background_tasks.create(refresh_grid())
+    except FatalAPIError as e:
+        set_badge(target, "failed")
+        ui.notify(f"❌ {e}", type="negative", timeout=8000)
+    except Exception as e:
+        set_badge(target, "failed")
+        ui.notify(f"❌ 试生成失败：{e}", type="negative", timeout=8000)
+    finally:
+        if btn is not None:
+            btn.set_enabled(True)
 
 
 async def load_preview(i: int) -> None:
@@ -1157,6 +1269,7 @@ def set_setting(key: str, value) -> None:
     save_settings()
     UI["batch_button"].set_enabled(client_ready())
     render_api_banner()
+    update_header_meta()
 
 
 def on_preset_change(e: events.ValueChangeEventArguments) -> None:
@@ -1345,6 +1458,17 @@ body { font-family: "Inter", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei
   backdrop-filter: blur(2px);
   border: 1px solid rgba(255,255,255,.35);
 }
+.tf-check {
+  position: absolute; top: 8px; left: 8px; z-index: 2;
+  width: 20px; height: 20px; border-radius: 9999px;
+  color: #fff; font-size: 13px; line-height: 20px; text-align: center;
+  box-shadow: 0 1px 3px rgba(0,0,0,.3);
+}
+.body--dark .tf-check { box-shadow: 0 0 0 2px var(--tf-surface), 0 1px 3px rgba(0,0,0,.4); }
+.body--dark .tf-badge { border-color: rgba(255,255,255,.18); }
+.body--dark .q-field--outlined .q-field__control { border-color: var(--tf-border); }
+.cursor-zoom-in { cursor: zoom-in !important; }
+.cursor-zoom-out { cursor: zoom-out !important; }
 
 /* 工具栏 */
 .tf-toolbar { border-radius: 14px; background: var(--tf-surface) !important; border: 1px solid var(--tf-border) !important; }
@@ -1378,7 +1502,10 @@ def build_ui() -> None:
         with ui.row().classes("items-center gap-3"):
             ui.label("⚒️ TagForge").classes("tf-logo text-xl font-bold")
             ui.label("LoRA 数据集图片打标工具").classes("tf-tagline hidden sm:block")
-        with ui.row().classes("ml-auto items-center gap-2"):
+        with ui.row().classes("ml-auto items-center gap-3"):
+            with ui.column().classes("gap-0 items-end"):
+                UI["header_model"] = ui.label("").classes("text-xs text-white/80")
+                UI["header_tokens"] = ui.label("").classes("text-xs text-white/60")
             def toggle_dark(e):
                 UI["dark"].enable() if e.value else UI["dark"].disable()
                 set_setting("dark", e.value)
@@ -1394,78 +1521,85 @@ def build_ui() -> None:
                 UI["help_dialog"].open()
             ui.button(icon="help_outline", on_click=show_help).props("flat round color=white")
 
-    # ---- 左侧面板：项目管理 + 模型配置 ----
+    # ---- 左侧面板：项目 / 配置 / 高级（P1-7 分页折叠） ----
     with ui.left_drawer(value=True, fixed=True).props("bordered").classes("tf-drawer w-80"):
-        with ui.column().classes("w-full gap-3 p-4"):
-            ui.label("项目管理").classes("tf-section")
-            ui.button("新建项目", icon="add", on_click=new_project) \
-                .props("unelevated rounded color=primary dense").classes("w-full")
-            with ui.column().classes("w-full h-44 overflow-y-auto gap-1"):
-                UI["project_list"] = ui.column().classes("w-full gap-1")
-            ui.button("删除项目", icon="delete_outline", on_click=delete_project) \
-                .props("flat dense rounded color=red-6").classes("w-full")
+        with ui.tabs().classes("w-full") as drawer_tabs:
+            tab_proj = ui.tab("项目", icon="folder")
+            tab_cfg = ui.tab("配置", icon="tune")
+            tab_adv = ui.tab("高级", icon="more_vert")
+        with ui.tab_panels(drawer_tabs, value=tab_proj).classes("w-full grow").props("animated"):
+            # ---- 项目 ----
+            with ui.tab_panel(tab_proj):
+                with ui.column().classes("w-full gap-3 p-3"):
+                    ui.button("新建项目", icon="add", on_click=new_project) \
+                        .props("unelevated rounded color=primary dense").classes("w-full")
+                    with ui.column().classes("w-full h-56 overflow-y-auto gap-1"):
+                        UI["project_list"] = ui.column().classes("w-full gap-1")
+                    ui.button("删除项目", icon="delete_outline", on_click=delete_project) \
+                        .props("flat dense rounded color=red-6").classes("w-full")
+            # ---- 配置（模型 + 提示词） ----
+            with ui.tab_panel(tab_cfg):
+                with ui.column().classes("w-full gap-1 p-3"):
+                    UI["model_preset_select"] = ui.select(list(MODEL_PRESETS.keys()),
+                                                               label="模型预设", on_change=on_preset_change) \
+                        .props("outlined dense").classes("w-full")
+                    UI["base_url_input"] = ui.input(label="Base URL",
+                                                    value=state.settings.get("base_url")) \
+                        .props("outlined dense").classes("w-full") \
+                        .on_value_change(lambda e: set_setting("base_url", e.value))
+                    UI["model_input"] = ui.input(label="模型名", value=state.settings.get("model")) \
+                        .props("outlined dense").classes("w-full") \
+                        .on_value_change(lambda e: set_setting("model", e.value))
+                    UI["api_key_input"] = ui.input(label="API Key", value=state.settings.get("api_key")) \
+                        .props("outlined dense type=password").classes("w-full") \
+                        .on_value_change(on_api_key_change)
+                    with ui.row().classes("w-full items-center gap-2"):
+                        UI["test_btn"] = ui.button("测试连接", icon="wifi_tethering",
+                                                   on_click=test_api) \
+                            .props("unelevated rounded color=primary dense").classes("flex-1")
+                        UI["test_spinner"] = ui.spinner(size="sm", color="primary").set_visibility(False)
 
-        ui.separator()
-        ui.label("模型配置").classes("tf-section")
-        with ui.column().classes("w-full gap-1"):
-            UI["model_preset_select"] = ui.select(list(MODEL_PRESETS.keys()),
-                                                       label="模型预设", on_change=on_preset_change) \
-                .props("outlined dense").classes("w-full")
-            UI["base_url_input"] = ui.input(label="Base URL",
-                                            value=state.settings.get("base_url")) \
-                .props("outlined dense").classes("w-full") \
-                .on_value_change(lambda e: set_setting("base_url", e.value))
-            UI["model_input"] = ui.input(label="模型名", value=state.settings.get("model")) \
-                .props("outlined dense").classes("w-full") \
-                .on_value_change(lambda e: set_setting("model", e.value))
-            UI["api_key_input"] = ui.input(label="API Key", value=state.settings.get("api_key")) \
-                .props("outlined dense type=password").classes("w-full") \
-                .on_value_change(on_api_key_change)
-            with ui.row().classes("w-full items-center gap-2"):
-                UI["test_btn"] = ui.button("测试连接", icon="wifi_tethering",
-                                           on_click=test_api) \
-                    .props("unelevated rounded color=primary dense").classes("flex-1")
-                UI["test_spinner"] = ui.spinner(size="sm", color="primary").set_visibility(False)
+                    ui.separator()
+                    ui.label("提示词预设").classes("tf-label")
+                    UI["prompt_select"] = ui.select(PROMPT_PRESETS, label="选择预设",
+                                                    value=state.settings.get("prompt_preset"),
+                                                    on_change=on_prompt_preset_change) \
+                        .props("outlined dense").classes("w-full")
+                    UI["prompt_textarea"] = ui.textarea(label="提示词内容（可直接编辑）",
+                                                        value=state.settings.get("system_prompt")) \
+                        .classes("w-full h-36").props("outlined dense") \
+                        .on_value_change(on_prompt_text_change)
+                    ui.button("恢复默认", on_click=restore_default_prompt).props("flat dense")
+                    ui.label("选择预设自动填充；手动编辑提示词将切为「自定义」") \
+                        .classes("tf-muted text-xs")
 
-            ui.separator()
-            ui.label("提示词预设（格式 × 训练目标）").classes("tf-label")
-            UI["prompt_select"] = ui.select(PROMPT_PRESETS, label="选择预设",
-                                            value=state.settings.get("prompt_preset"),
-                                            on_change=on_prompt_preset_change) \
-                .props("outlined dense").classes("w-full")
-            UI["prompt_textarea"] = ui.textarea(label="提示词内容（可直接编辑）",
-                                                value=state.settings.get("system_prompt")) \
-                .classes("w-full h-36").props("outlined dense") \
-                .on_value_change(on_prompt_text_change)
-            ui.button("恢复默认", on_click=restore_default_prompt).props("flat dense")
-            ui.label("选择预设自动填充；手动编辑提示词将切为「自定义」") \
-                .classes("tf-muted text-xs")
+                    ui.label("角色名（角色 LoRA）").classes("tf-label")
+                    UI["character_name_input"] = ui.input(
+                        label="角色名（如 mw_cyber_girl）",
+                        value=state.settings.get("character_name")) \
+                        .props("outlined dense").classes("w-full") \
+                        .on_value_change(on_character_name_change)
+                    ui.label("填写后，「角色 LoRA」预设会用该名称称呼角色并置于输出开头") \
+                        .classes("tf-muted text-xs")
+            # ---- 高级（前缀 / 并发 / 导出） ----
+            with ui.tab_panel(tab_adv):
+                with ui.column().classes("w-full gap-1 p-3"):
+                    ui.label("触发词前缀").classes("tf-label")
+                    ui.input(value=state.settings.get("tag_prefix")) \
+                        .props("outlined dense").classes("w-full") \
+                        .on_value_change(lambda e: set_setting("tag_prefix", e.value))
+                    ui.radio({"prepend": "整体前置", "per_tag": "每个 tag 加前缀"},
+                             value=state.settings.get("prefix_mode"),
+                             on_change=lambda e: set_setting("prefix_mode", e.value)).props("dense")
 
-            ui.label("角色名（角色 LoRA）").classes("tf-label")
-            UI["character_name_input"] = ui.input(
-                label="角色名（如 mw_cyber_girl）",
-                value=state.settings.get("character_name")) \
-                .props("outlined dense").classes("w-full") \
-                .on_value_change(on_character_name_change)
-            ui.label("填写后，「角色 LoRA」预设会用该名称称呼角色并置于输出开头") \
-                .classes("tf-muted text-xs")
+                    ui.label("并发数").classes("tf-label")
+                    ui.number(value=state.settings.get("concurrency"), min=1, max=32, step=1) \
+                        .props("outlined dense").classes("w-full") \
+                        .on_value_change(lambda e: set_setting("concurrency", int(e.value)))
 
-            ui.label("触发词前缀").classes("tf-label")
-            ui.input(value=state.settings.get("tag_prefix")) \
-                .props("outlined dense").classes("w-full") \
-                .on_value_change(lambda e: set_setting("tag_prefix", e.value))
-            ui.radio({"prepend": "整体前置", "per_tag": "每个 tag 加前缀"},
-                     value=state.settings.get("prefix_mode"),
-                     on_change=lambda e: set_setting("prefix_mode", e.value)).props("dense")
-
-            ui.label("并发数").classes("tf-label")
-            ui.number(value=state.settings.get("concurrency"), min=1, max=32, step=1) \
-                .props("outlined dense").classes("w-full") \
-                .on_value_change(lambda e: set_setting("concurrency", int(e.value)))
-
-            ui.separator()
-            ui.button("打包导出", icon="archive", on_click=export_zip) \
-                .props("unelevated rounded color=teal-7").classes("w-full")
+                    ui.separator()
+                    ui.button("打包导出", icon="archive", on_click=export_zip) \
+                        .props("unelevated rounded color=teal-7").classes("w-full")
 
     # ---- 主区域 ----
     with ui.column().classes("w-full items-center px-6 pt-4"):
@@ -1480,10 +1614,12 @@ def build_ui() -> None:
                         .classes("hidden")
                     ui.button("上传图片", icon="upload",
                               on_click=lambda: UI["uploader"].run_method("pickFiles")) \
-                        .props("unelevated rounded color=indigo-9")
+                        .props("unelevated rounded color=indigo-6")
                 UI["upload_status"] = ui.label("").classes("tf-muted text-xs").set_visibility(False)
                 UI["batch_button"] = ui.button("开始批量标注", icon="auto_awesome", on_click=start_batch) \
                     .props("unelevated rounded color=primary").set_enabled(client_ready())
+                UI["trial_btn"] = ui.button("试生成 1 张", icon="bolt", on_click=trial_generate) \
+                    .props("outline rounded color=teal-7").set_enabled(client_ready())
                 UI["main_progress"] = ui.linear_progress(value=0.0, show_value=True) \
                     .classes("w-56").set_visibility(False)
 
@@ -1534,7 +1670,17 @@ def build_ui() -> None:
         .classes("tf-drawer")
 
     # ---- 弹窗 ----
+    with ui.dialog() as UI["lightbox_dialog"]:
+        with ui.card().classes("bg-transparent no-shadow"):
+            UI["lightbox_img"] = ui.image("") \
+                .classes("max-w-[94vw] max-h-[90vh] cursor-zoom-out") \
+                .on("click", lightbox_close)
+            ui.label("点击图片或按 Esc 关闭").classes("tf-muted text-xs w-full text-center mt-1")
+
     with ui.dialog() as UI["help_dialog"]:
+        pass
+
+    with ui.keyboard(on_key=handle_shortcuts):
         pass
 
     with ui.dialog() as UI["project_dialog"]:
@@ -1546,10 +1692,6 @@ def build_ui() -> None:
     with ui.dialog() as UI["confirm_delete_project"]:
         pass
 
-    # ---- 右下角 Token 统计 ----
-    with ui.column().classes("fixed bottom-3 right-3"):
-        UI["tokens"] = ui.label("Tokens：—").classes("tf-token")
-
     # 初始加载：优先恢复上次项目，缺失时回退到第一个项目
     refresh_project_list()
     remembered = state.settings.get("last_project") or ""
@@ -1557,6 +1699,7 @@ def build_ui() -> None:
     if state.current:
         UI["toolbar_title"].set_text(state.current)
         background_tasks.create(refresh_grid())
+    update_header_meta()
 
 
 @ui.page('/')
