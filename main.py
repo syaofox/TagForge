@@ -407,6 +407,44 @@ def client_ready() -> bool:
     return bool(base) and (bool(key) or "ollama" in base.lower())
 
 
+async def test_api() -> None:
+    """用左侧当前填写的 Base URL / Key / 模型做连通性测试。"""
+    base = (UI["base_url_input"].value or "").strip()
+    key = (UI["api_key_input"].value or "").strip()
+    model = (UI["model_input"].value or "").strip()
+    if not base or not model:
+        ui.notify("请先填写 Base URL 与模型名", type="warning")
+        return
+    if not key and "ollama" not in base.lower():
+        ui.notify("API Key 为空（Ollama 本地可留空）", type="warning")
+        return
+    btn = UI.get("test_btn")
+    spin = UI.get("test_spinner")
+    try:
+        if btn is not None:
+            btn.set_enabled(False)
+            btn.set_text("测试中…")
+        if spin is not None:
+            spin.set_visibility(True)
+    except Exception:
+        pass
+    client = LLMClient(api_key=key, base_url=base, model_name=model)
+    try:
+        ok, detail = await client.ping()
+        ui.notify(f"✅ API 可用：{detail}", type="positive", timeout=8000)
+    except FatalAPIError as e:
+        ui.notify(f"❌ {e}", type="negative", timeout=10000)
+    finally:
+        try:
+            if btn is not None:
+                btn.set_enabled(True)
+                btn.set_text("测试连接")
+            if spin is not None:
+                spin.set_visibility(False)
+        except Exception:
+            pass
+
+
 def ensure_client() -> bool:
     s = state.settings
     base = (s.get("base_url") or "").strip()
@@ -1082,6 +1120,11 @@ def build_ui() -> None:
             UI["api_key_input"] = ui.input(label="API Key", value=state.settings.get("api_key")) \
                 .props("outlined dense type=password").classes("w-full") \
                 .on_value_change(lambda e: set_setting("api_key", e.value))
+            with ui.row().classes("w-full items-center gap-2"):
+                UI["test_btn"] = ui.button("测试连接", icon="wifi_tethering",
+                                           on_click=test_api) \
+                    .props("unelevated rounded color=primary dense").classes("flex-1")
+                UI["test_spinner"] = ui.spinner(size="sm", color="primary").set_visibility(False)
 
             ui.separator()
             ui.label("提示词预设（格式 × 训练目标）").classes("tf-label")

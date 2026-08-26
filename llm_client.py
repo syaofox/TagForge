@@ -10,6 +10,7 @@
 import asyncio
 import base64
 import io
+import time
 
 import httpx
 from PIL import Image
@@ -63,6 +64,43 @@ class LLMClient:
         buf = io.BytesIO()
         im.save(buf, format="JPEG", quality=quality)
         return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+
+    async def ping(self) -> tuple[bool, str]:
+        """API 连通性测试：验证地址 / Key / 模型是否可用（几乎不消耗生成 token）。
+
+        :return: (True, 详情) 或抛 FatalAPIError
+        """
+        t0 = time.perf_counter()
+        detail: list[str] = []
+        try:
+            try:
+                ids = [m.id for m in (await self.client.models.list()).data]
+                detail.append(f"模型列表 {len(ids)} 个")
+            except APIStatusError as e:
+                if e.status_code in (401, 403):
+                    raise FatalAPIError(f"API Key 无效或无权限（HTTP {e.status_code}）") from e
+                if e.status_code == 404:
+                    detail.append("/models 不可用（部分网关不支持）")
+                else:
+                    detail.append(f"/models 返回 HTTP {e.status_code}")
+            except APIError as e:
+                detail.append(f"/models 失败：{e}")
+            # 最小文本补全，验证配置的模型真实可用
+            resp = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": "ping"}],
+                max_tokens=1,
+            )
+            ok = bool(resp.choices and resp.choices[0].message.content is not None)
+            latency = round((time.perf_counter() - t0) * 1000, 1)
+            detail.append(f"模型 {self.model} {'可用' if ok else '返回空'}，耗时 {latency}ms")
+            return True, "；".join(detail)
+        except APIStatusError as e:
+            if e.status_code in (401, 403):
+                raise FatalAPIError(f"API Key 无效或无权限（HTTP {e.status_code}）") from e
+            raise FatalAPIError(f"调用失败 HTTP {e.status_code}：{e.message}") from e
+        except APIError as e:
+            raise FatalAPIError(f"连接失败：{e}") from e
 
     async def generate(self, image_base64: str, prompt: str, mode: str) -> str:
         """调用视觉模型生成标签文本。
