@@ -103,4 +103,135 @@
     }
   });
 
+
+  // ---------- 事件总线（HX-Trigger -> 自定义事件） ----------
+  function refreshGrid() {
+    if ($("#grid")) htmx.ajax("GET", "/partials/grid_cards", gridSwap);
+  }
+  document.addEventListener("gridChanged", refreshGrid);
+  document.addEventListener("detailReload", () => {
+    const drawer = $("#detail-drawer");
+    if (drawer && drawer.dataset.name) {
+      const cur = document.getElementById("toolbar-title");
+      const project = cur && cur.textContent !== "（未选择项目）" ? cur.textContent : "";
+      htmx.ajax("GET", "/partials/detail?project=" + encodeURIComponent(project) + "&name=" + encodeURIComponent(drawer.dataset.name),
+        { target: "#detail-drawer", swap: "innerHTML" });
+    }
+  });
+  document.addEventListener("detailClosed", closeDetail);
+
+  // ---------- 详情抽屉 ----------
+  const drawer = $("#detail-drawer");
+  function closeDetail() { if (drawer) { drawer.classList.remove("open"); drawer.dataset.name = ""; } }
+  $("#btn-detail-close")?.addEventListener?.("click", closeDetail);
+  document.body.addEventListener("htmx:afterSwap", (e) => {
+    if (e.detail && e.detail.target && e.detail.target.id === "detail-drawer") {
+      drawer.classList.add("open");
+      const nameEl = drawer.querySelector(".tf-detail-title");
+      drawer.dataset.name = nameEl ? nameEl.textContent : "";
+      const ta = drawer.querySelector("#tag-text");
+      if (ta) ta.focus({ preventScroll: true });
+    }
+  });
+
+  // ---------- 删除图片 ----------
+  document.body.addEventListener("click", (e) => {
+    const btn = e.target.closest("#btn-delete-image");
+    if (!btn) return;
+    const drawerEl = $("#detail-drawer");
+    const name = drawerEl && drawerEl.dataset.name;
+    const project = $("#toolbar-title")?.textContent;
+    if (!name || !project || project === "（未选择项目）") return;
+    TF.confirm("确定删除该图片及其标签吗？此操作不可恢复。").then((yes) => {
+      if (yes) htmx.ajax("DELETE", "/api/image/" + encodeURIComponent(project) + "/" + encodeURIComponent(name), gridSwap);
+    });
+  });
+
+  // ---------- 再生按钮状态 ----------
+  const genBtn = $("#btn-regenerate");
+  if (genBtn) {
+    genBtn.addEventListener("htmx:beforeRequest", () => { genBtn.disabled = true; genBtn.textContent = "生成中…"; $("#gen-spinner")?.toggleAttribute("hidden", false); });
+    genBtn.addEventListener("htmx:afterRequest", () => { genBtn.disabled = false; genBtn.textContent = "重新生成"; $("#gen-spinner")?.toggleAttribute("hidden", true); });
+  }
+
+  // ---------- Lightbox ----------
+  function openLightbox(src) {
+    const lb = $("#lightbox");
+    lb.innerHTML = '<img src="' + src + '"><div class="tf-lightbox-hint">点击任意处或按 Esc 关闭</div>';
+    lb.hidden = false;
+  }
+  function closeLightbox() { $("#lightbox").hidden = true; }
+  document.body.addEventListener("click", (e) => {
+    const img = e.target.closest(".tf-detail-img[data-lightbox]");
+    if (img) openLightbox(img.dataset.lightbox);
+    else if (e.target.closest("#lightbox")) closeLightbox();
+  });
+
+  // ---------- 快捷键 ----------
+  document.addEventListener("keydown", (e) => {
+    const lb = $("#lightbox");
+    if (e.key === "Escape") {
+      if (lb && !lb.hidden) { closeLightbox(); return; }
+      if (drawer && drawer.classList.contains("open")) { closeDetail(); return; }
+    }
+    if (drawer && drawer.classList.contains("open")) {
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && e.target && e.target.id === "tag-text") {
+        e.preventDefault();
+        const ta = e.target;
+        const url = ta.getAttribute("hx-post");
+        if (url) htmx.ajax("POST", url, { source: ta, values: { text: ta.value }, target: "body", swap: "none" });
+      } else if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        const dir = e.key === "ArrowLeft" ? "上一张" : "下一张";
+        const btn = Array.from(drawer.querySelectorAll("button")).find((b) => b.textContent.includes(dir));
+        if (btn) btn.click();
+      }
+    }
+  });
+
+  // ---------- 上传（点击 + 拖拽，逐文件 XHR） ----------
+  const uploadInput = $("#upload-input");
+  function sendUploads(fileList) {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    const project = $("#toolbar-title")?.textContent;
+    if (!project || project === "（未选择项目）") { TF.toast("请先选择项目", "warning"); return; }
+    const status = $("#upload-status");
+    status.hidden = false;
+    const total = files.length;
+    let done = 0, ok = 0, fail = 0, renamed = 0;
+    const finish = () => {
+      if (done !== total) return;
+      status.hidden = true;
+      if (ok) TF.toast("已上传 " + ok + " 张" + (renamed ? "（" + renamed + " 张同名已自动改名）" : ""), "positive");
+      if (fail) TF.toast(fail + " 张上传失败（类型不支持或写入出错）", "negative");
+      refreshGrid();
+    };
+    files.forEach((f) => {
+      const fd = new FormData();
+      fd.append("files", f);
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", "/api/upload");
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) status.textContent = "上传中… " + (done + 1) + "/" + total + "（" + Math.round((e.loaded / e.total) * 100) + "%）";
+      };
+      xhr.onload = () => {
+        done++;
+        if (xhr.status === 200) {
+          try { const rr = JSON.parse(xhr.responseText); ok += rr.ok; fail += rr.fail; renamed += rr.renamed; }
+          catch (_) { fail++; }
+        } else { fail++; }
+        finish();
+      };
+      xhr.onerror = () => { done++; fail++; finish(); };
+      xhr.send(fd);
+    });
+  }
+  $("#btn-upload")?.addEventListener("click", () => uploadInput && uploadInput.click());
+  uploadInput?.addEventListener("change", () => { sendUploads(uploadInput.files); uploadInput.value = ""; });
+  const mainEl = $("#main");
+  if (mainEl) {
+    ["dragover", "dragenter"].forEach((ev) => mainEl.addEventListener(ev, (e) => { e.preventDefault(); }));
+    mainEl.addEventListener("drop", (e) => { e.preventDefault(); sendUploads(e.dataTransfer && e.dataTransfer.files); });
+  }
+
 })();

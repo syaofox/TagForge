@@ -11,12 +11,13 @@ import json
 import urllib.parse
 from pathlib import Path
 
-from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, Response
+from fastapi import FastAPI, File, Request, UploadFile
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 import core
+from llm_client import FatalAPIError, LLMClient
 
 ROOT = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(ROOT / "templates"))
@@ -34,6 +35,36 @@ def uq(s) -> str:
 def _toast(resp: Response, msg: str, type: str = "positive") -> Response:
     resp.headers["HX-Trigger"] = json.dumps({"toast": {"msg": msg, "type": type}})
     return resp
+
+
+def _trigger(request, *triggers) -> Response:
+    """组装 HX-Trigger 头（toast 特例直接传 dict）。"""
+    resp = Response(status_code=204)
+    payload = {}
+    for t in triggers:
+        if isinstance(t, dict):
+            payload.update(t)
+        else:
+            payload[t] = True
+    if payload:
+        resp.headers["HX-Trigger"] = json.dumps(payload)
+    return resp
+
+
+def _client_or_toast() -> tuple[LLMClient | None, Response | None]:
+    """校验配置并返回客户端；失败时返回带提示的响应。"""
+    s = core.state.settings
+    base = (s.get("base_url") or "").strip()
+    model = (s.get("model") or "").strip()
+    if not base or not model:
+        return None, _toast(Response(status_code=400), "请先配置 Base URL 与模型", "warning")
+    if not core.client_ready():
+        return None, _toast(Response(status_code=400), "API Key 为空，无法调用 API", "warning")
+    return core.build_client(), None
+
+
+def _find_entry(name: str):
+    return next((e for e in core.state.entries if e.name == name), None)
 
 
 # ---------------- 渲染上下文 ----------------
@@ -173,6 +204,124 @@ async def thumb(project: str, name: str) -> Response:
     if p is None:
         return Response(status_code=404)
     return FileResponse(p, media_type="image/jpeg")
+
+
+@app.get("/api/image/{project}/{name}")
+async def image(project: str, name: str) -> Response:
+    p = core.images_dir(project) / name
+    if not p.is_file():
+        return Response(status_code=404)
+    return FileResponse(p)
+
+
+# ---------------- 详情 / 标签 / 再生 / 删除 ----------------
+@app.get("/partials/detail")
+async def detail(request: Request, project: str, name: str) -> Response:
+    entry = _find_entry(name)
+    if entry is None:
+        resp = templates.TemplateResponse(request, "partials/detail.html",
+                                          _ctx(project=project))
+        return resp
+    entries = core.state.entries
+    idx = entries.index(entry)
+    total = len(entries)
+
+    def _nav(delta: int) -> dict | None:
+        if total <= 1:
+            return None
+        e = entries[(idx + delta) % total]
+        return {"name": e.name}
+
+    ctx = _ctx(project=project, entry=entry, label=core.read_label(project, entry.name),
+               index=idx, total=total, prev=_nav(-1), next=_nav(1))
+    return templates.TemplateResponse(request, "partials/detail.html", ctx)
+
+
+@app.post("/api/label/{project}/{name}")
+async def save_label(request: Request, project: str, name: str) -> Response:
+    form = await request.form()
+    text = (form.get("text") or "").strip()
+    core.write_label(project, name, text)
+    entry = _find_entry(name)
+    if entry is not None:
+        entry.status = "tagged" if text else "pending"
+        entry.label = text
+    resp = _trigger(request, {"gridChanged": True})
+    return resp
+
+
+@app.post("/api/regenerate")
+async def regenerate(request: Request) -> Response:
+    form = await request.form()
+    project = form.get("project") or core.state.current
+    name = form.get("name") or ""
+    entry = _find_entry(name)
+    if entry is None:
+        return _toast(Response(status_code=400), "未找到该图片", "warning")
+    client, err = _client_or_toast()
+    if err is not None:
+        return _toast(err, "配置无效，请先检查 Base URL / Key / 模型", "warning")
+    entry.status = "processing"
+    try:
+        data = await core.encode_for_api_async(entry.path)
+        tags = await client.generate(data, core.state.settings.get("system_prompt", ""))
+        final = core.apply_prefix(tags, core.state.settings.get("tag_prefix", ""),
+                                  core.state.settings.get("prefix_mode", "prepend"))
+        core.write_label(project, name, final)
+        entry.status = "tagged"
+        entry.label = final
+        resp = _trigger(request, {"gridChanged": True, "detailReload": True,
+                                  "toast": {"msg": "重新生成完成", "type": "positive"}})
+        return resp
+    except FatalAPIError as e:
+        entry.status = "failed"
+        return _toast(Response(status_code=500), f"生成失败：{e}", "negative")
+    except Exception as e:
+        entry.status = "failed"
+        return _toast(Response(status_code=500), f"生成失败：{e}", "negative")
+
+
+@app.delete("/api/image/{project}/{name}")
+async def delete_image(request: Request, project: str, name: str) -> Response:
+    entry = _find_entry(name)
+    try:
+        (core.images_dir(project) / name).unlink()
+        lp = core.label_file(project, name)
+        if lp.exists():
+            lp.unlink()
+    except OSError as e:
+        return _toast(Response(status_code=500), f"删除失败：{e}", "negative")
+    (core.DATASETS / ".cache" / project / f"{Path(name).stem}.thumb.jpg").unlink(missing_ok=True)
+    if entry is not None:
+        core.state.entries.remove(entry)
+    resp = _trigger(request, {"gridChanged": True, "detailClosed": True,
+                              "toast": {"msg": f"已删除 {name}", "type": "positive"}})
+    return resp
+
+
+# ---------------- 上传（multipart，前端逐文件 XHR） ----------------
+@app.post("/api/upload")
+async def upload(request: Request, files: list[UploadFile] = File(...)) -> JSONResponse:
+    project = core.state.current
+    if not project:
+        return JSONResponse({"ok": 0, "fail": len(files), "renamed": 0}, status_code=400)
+    ok = fail = renamed = 0
+    for f in files:
+        name = f.filename or ""
+        dst, ren = core.resolve_upload_destination(project, name)
+        if dst is None:
+            fail += 1
+            continue
+        try:
+            data = await f.read()
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_bytes(data)
+            ok += 1
+            if ren:
+                renamed += 1
+        except Exception:
+            fail += 1
+    return JSONResponse({"ok": ok, "fail": fail, "renamed": renamed})
 
 
 # ---------------- 配置（通用单键保存） ----------------

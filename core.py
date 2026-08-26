@@ -474,6 +474,13 @@ def soft_color(hex_color: str, alpha: float = 0.14) -> str:
     return f"rgba({r},{g},{b},{alpha})"
 
 
+def build_client(settings: dict | None = None) -> LLMClient:
+    """按配置构造客户端（batch / 单张生成 / 试生成共用）。"""
+    s = settings or state.settings
+    return LLMClient(api_key=s.get("api_key"), base_url=s.get("base_url"),
+                     model_name=s.get("model"))
+
+
 # ---------------- 统计 / 筛选（给定 state，纯函数） ----------------
 def compute_stats() -> dict:
     """统计各状态图片数。"""

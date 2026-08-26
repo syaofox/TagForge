@@ -1,0 +1,38 @@
+<div class="tf-detail-head">
+  <div>
+    <div class="tf-detail-title">{{ entry.path.name if entry else '图片不存在' }}</div>
+    <div class="tf-detail-nav">◀ ▶ 可切换上一张 / 下一张</div>
+  </div>
+  <button class="btn btn-icon" id="btn-detail-close" title="关闭">✕</button>
+</div>
+{% if entry %}
+<img class="tf-detail-img"
+     src="/api/image/{{ uq(project) }}/{{ uq(entry.name) }}"
+     data-lightbox="/api/image/{{ uq(project) }}/{{ uq(entry.name) }}"
+     alt="{{ entry.name }}">
+<label class="tf-label">标签文本</label>
+<textarea id="tag-text" class="tf-input tf-textarea" rows="6"
+          placeholder="留空 = 待标注；保存时写盘"
+          hx-post="/api/label/{{ uq(project) }}/{{ uq(entry.name) }}"
+          hx-trigger="change, keyup changed delay:1200ms"
+          hx-include="this" hx-target="body" hx-swap="none" name="text">{{ label }}</textarea>
+<div class="tf-detail-actions">
+  <button class="btn btn-primary" id="btn-regenerate"
+          hx-post="/api/regenerate"
+          hx-vals='{"project": "{{ project }}", "name": "{{ entry.name }}"}'
+          hx-swap="none">重新生成</button>
+  <span id="gen-spinner" class="tf-spinner" hidden></span>
+  <button class="btn btn-danger" id="btn-delete-image">删除图片</button>
+</div>
+<div class="tf-detail-actions" style="justify-content:space-between">
+  {% if prev %}
+  <button class="btn btn-ghost" hx-get="/partials/detail?project={{ uq(project) }}&name={{ uq(prev.name) }}"
+          hx-target="#detail-drawer" hx-swap="innerHTML">◀ 上一张</button>
+  {% else %}<span></span>{% endif %}
+  <span class="tf-chip">{{ index + 1 }} / {{ total }}</span>
+  {% if next %}
+  <button class="btn btn-ghost" hx-get="/partials/detail?project={{ uq(project) }}&name={{ uq(next.name) }}"
+          hx-target="#detail-drawer" hx-swap="innerHTML">下一张 ▶</button>
+  {% else %}<span></span>{% endif %}
+</div>
+{% endif %}
