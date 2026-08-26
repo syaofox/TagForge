@@ -42,6 +42,8 @@ def test_project_crud_and_grid_flow(client):
     # 网格出现两张（一原一同名改名）
     r = client.get("/partials/grid_cards?filter=all&q=")
     assert "a.png" in r.text and "a (1).png" in r.text
+    # 回归：缩略图 URL 必须带项目名（防止 project 变量缺失导致 // 404）
+    assert 'src="/api/image/thumb/pytest_tmp/a.png"' in r.text
     # 缩略图可用
     r = client.get("/api/image/thumb/pytest_tmp/a.png")
     assert r.status_code == 200 and r.headers["content-type"] == "image/jpeg"

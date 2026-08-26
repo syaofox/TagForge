@@ -92,6 +92,7 @@ def _ctx(**kw) -> dict:
         "settings": core.state.settings,
         "projects": core.scan_projects(),
         "current": core.state.current,
+        "project": core.state.current,  # 模板中图片 URL 等用（card.html 的 src/hx-get）
         "entries": core.state.entries,
         "model_presets": core.MODEL_PRESETS,
         "prompt_presets": core.PROMPT_PRESETS,
