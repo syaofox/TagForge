@@ -63,7 +63,7 @@
     const d = document.getElementById(id);
     if (d && !d.open) d.showModal();
   }
-  $("[data-close]").forEach((b) => b.addEventListener("click", () => b.closest("dialog").close()));
+  $$("[data-close]").forEach((b) => b.addEventListener("click", () => b.closest("dialog").close()));
 
   // 通用确认框（Promise）
   TF.confirm = function (text) {
@@ -364,7 +364,7 @@
     el.addEventListener("change", save);
     if (debounce) el.addEventListener("input", () => TF.saveSettingDebounced(key, el));
   });
-  $('input[name="prefix-mode"]').forEach((r) => r.addEventListener("change", () => TF.saveSetting("prefix_mode", r.value)));
+  $$('input[name="prefix-mode"]').forEach((r) => r.addEventListener("change", () => TF.saveSetting("prefix_mode", r.value)));
 
   // 模型预设：回填 Base URL / 模型 / 该预设记忆的 Key
   $("#model-preset")?.addEventListener("change", async () => {

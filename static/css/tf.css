@@ -19,6 +19,8 @@
   --tf-muted: #9aa1b4;
 }
 * { box-sizing: border-box; }
+/* 关键：保证 hidden 属性永远生效（作者样式如 .tf-lightbox/.tf-batch-card display:flex 会覆盖 UA 规则） */
+[hidden] { display: none !important; }
 html, body { margin: 0; background: var(--tf-bg); color: var(--tf-text); }
 body { font-family: "Inter", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, -apple-system, sans-serif; font-size: 14px; }
 

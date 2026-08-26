@@ -5,16 +5,25 @@
 """
 import io
 import zipfile
+from pathlib import Path
 
 from PIL import Image
 
 import core
+
+TF_CSS = Path(__file__).resolve().parent.parent / "static" / "css" / "tf.css"
 
 
 def _png_bytes(size: int = 32, color=(120, 30, 200)) -> bytes:
     buf = io.BytesIO()
     Image.new("RGB", (size, size), color).save(buf, format="PNG")
     return buf.getvalue()
+
+
+def test_css_hidden_guard():
+    """回归：作者 display 规则不得覆盖 hidden 属性（否则 lightbox/批量卡等常显导致黑屏）。"""
+    css = TF_CSS.read_text(encoding="utf-8")
+    assert "[hidden] { display: none !important; }" in css
 
 
 def test_home_renders(client):
