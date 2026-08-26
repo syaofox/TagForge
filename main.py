@@ -50,6 +50,52 @@ DEFAULT_PROMPTS = {
     ),
 }
 
+# 训练场景预设提示词（依据 LoRA 数据集打标规范整理，见设计文档 11.3 与 reference.md）：
+# - 角色：省略身份特征（脸/瞳/发/体型，交给触发词吸收），保留服装/姿势/表情/镜头/背景/光线，元素顺序一致；
+# - 服装：服装是主体，具体描述款式/颜色/面料/版型/细节/褶皱，穿者泛化；
+# - 风格：打「内容」不打「风格」，风格词至多 2-3 个稳定词，禁质量词。
+TRAINING_PROMPTS = {
+    "character": (
+        "You are a captioning assistant for CHARACTER LoRA training datasets. "
+        "Generate 5-12 comma-separated danbooru-style tags (lowercase, no underscores). "
+        "Rule: identity must be absorbed by the trigger token, so OMIT features that are "
+        "fixed across the dataset (face shape, eye/hair color, skin, body type). "
+        "INCLUDE: clothing and its details, pose/action, expression, shot type "
+        "(full_body, close-up, ...), background/setting, lighting, and media type "
+        "(1girl, solo, ...). Keep the element order consistent across every image; "
+        "consistency matters more than exhaustive detail. Output only the tags."
+    ),
+    "clothing": (
+        "You are a captioning assistant for CLOTHING LoRA training datasets. "
+        "Generate 5-12 comma-separated danbooru-style tags (lowercase, no underscores). "
+        "The garment is the subject: ALWAYS include garment type, color, material/fabric, "
+        "fit and cut (sleeve_length, collar, hem), visible details (buttons, zippers, "
+        "ribbons, embroidery), folds/texture when visible, and how it is worn "
+        "(zipped, tucked, ...). Keep the wearer generic - never describe the person's "
+        "identity. Add view tags when recognizable (front_view, side_view, back_view, "
+        "full_body, close-up, flat_lay). Order: garment, material/color, fit details, "
+        "wearer context, view. Output only the tags."
+    ),
+    "style": (
+        "You are a captioning assistant for STYLE / art-style LoRA training datasets. "
+        "Generate 5-12 comma-separated danbooru-style tags (lowercase, no underscores). "
+        "Rule: caption the CONTENT, not the style - describe subjects, scene and "
+        "composition so content never becomes bound to the style. Add at most 2-3 STABLE "
+        "style cues (e.g. lineart, cel_shading, watercolor, rough_sketch, thick_outlines, "
+        "grainy, muted_colors). Avoid generic quality tags (masterpiece, best_quality, 4k). "
+        "Output only the tags."
+    ),
+}
+
+# 提示词下拉选项：value -> 显示名
+PROMPT_PRESETS = {
+    "mode": "随打标模式（短标签/自然语言）",
+    "character": "角色 LoRA 训练",
+    "clothing": "服装 LoRA 训练",
+    "style": "风格 LoRA 训练",
+    "custom": "自定义",
+}
+
 DEFAULT_SETTINGS = {
     "api_key": "",
     "base_url": "https://api.openai.com/v1",
@@ -61,6 +107,7 @@ DEFAULT_SETTINGS = {
     "dark": False,
     "concurrency": 5,
     "last_project": "",
+    "prompt_preset": "mode",
 }
 
 # 模型预设（名称 -> Base URL / 默认模型）。Claude 需中转站、DeepSeek-VL 需自建端点、Ollama 需 /v1。
@@ -107,6 +154,7 @@ class AppState:
     abort_batch: bool = False
     index: int = 0
     tagbox: Optional[ui.textarea] = None
+    suppress_prompt_sync: bool = False  # 程序性更新提示词时抑制「视为自定义」
 
 
 state = AppState()
@@ -123,6 +171,12 @@ def load_settings() -> dict:
         return dict(DEFAULT_SETTINGS)
     merged = dict(DEFAULT_SETTINGS)
     merged.update({k: v for k, v in data.items() if k in DEFAULT_SETTINGS})
+    # 兼容旧配置：缺少 prompt_preset 时按提示词内容推断（=模式默认 => 随模式；否则 => 自定义，保留用户体验）
+    if "prompt_preset" not in data:
+        mode = merged.get("mode", "short")
+        sp = (merged.get("system_prompt") or "").strip()
+        merged["prompt_preset"] = (
+            "mode" if sp == DEFAULT_PROMPTS.get(mode, "").strip() else "custom")
     return merged
 
 
@@ -686,27 +740,59 @@ def on_preset_change(e: events.ValueChangeEventArguments) -> None:
     set_setting("model", preset["model"])
 
 
+def set_prompt_text(value: str) -> None:
+    """静默更新提示词文本框（不触发「视为自定义」判定）。"""
+    state.suppress_prompt_sync = True
+    try:
+        UI["prompt_textarea"].value = value
+    finally:
+        state.suppress_prompt_sync = False
+
+
+def on_prompt_text_change(e: events.ValueChangeEventArguments) -> None:
+    """手动编辑提示词：自动切到「自定义」预设并保存。"""
+    if state.suppress_prompt_sync:
+        return
+    if state.settings.get("prompt_preset") != "custom":
+        state.settings["prompt_preset"] = "custom"
+        UI["prompt_select"].value = "custom"
+    set_setting("system_prompt", e.value or "")
+
+
+def on_prompt_preset_change(e: events.ValueChangeEventArguments) -> None:
+    """选择提示词预设：自动填充对应提示词；「自定义」保留现有文本。"""
+    preset = e.value
+    state.settings["prompt_preset"] = preset
+    if preset == "mode":
+        default = DEFAULT_PROMPTS.get(state.settings.get("mode", "short"), DEFAULT_PROMPTS["short"])
+        set_prompt_text(default)
+        state.settings["system_prompt"] = default
+    elif preset in TRAINING_PROMPTS:
+        text = TRAINING_PROMPTS[preset]
+        set_prompt_text(text)
+        state.settings["system_prompt"] = text
+    save_settings()
+
+
 def restore_default_prompt() -> None:
+    """恢复为「随打标模式」并填入该模式默认提示词。"""
+    state.settings["prompt_preset"] = "mode"
+    UI["prompt_select"].value = "mode"
     default = DEFAULT_PROMPTS.get(state.settings.get("mode", "short"), DEFAULT_PROMPTS["short"])
-    UI["prompt_textarea"].value = default
-    set_setting("system_prompt", default)
-    ui.notify("已恢复该模式的默认提示词")
+    set_prompt_text(default)
+    state.settings["system_prompt"] = default
+    save_settings()
+    ui.notify("已恢复为「随打标模式」默认提示词")
 
 
 def on_mode_change(e: events.ValueChangeEventArguments) -> None:
-    """切换打标模式：
-    1) 提示词未被自定义（与当前模式默认一致）时，自动换成新模式的默认提示词；
-    2) 用户自定义过则保留自定义内容（自定义始终优先），仅提示。
-    """
+    """切换打标模式：仅当预设为「随打标模式」时，同步提示词为新模式默认。"""
     new_mode = e.value
-    old_mode = state.settings.get("mode", "short")
-    current = (UI["prompt_textarea"].value or "").strip()
-    if current == DEFAULT_PROMPTS.get(old_mode, "").strip():
+    if state.settings.get("prompt_preset") == "mode":
         default = DEFAULT_PROMPTS.get(new_mode, DEFAULT_PROMPTS["short"])
-        UI["prompt_textarea"].value = default
-        set_setting("system_prompt", default)
-    else:
-        ui.notify("已保留自定义提示词（自定义内容优先，不被模式切换覆盖）", type="info")
+        set_prompt_text(default)
+        state.settings["system_prompt"] = default
+        save_settings()
     set_setting("mode", new_mode)
 
 
@@ -858,14 +944,18 @@ def build_ui() -> None:
             ui.radio({"short": "短标签（逗号分隔）", "natural": "自然语言描述"},
                      value=state.settings.get("mode"), on_change=on_mode_change) \
                 .props("dense")
-            ui.label("提示词与模式默认一致时随模式切换；自定义后优先使用自定义内容") \
-                .classes("tf-muted text-xs")
-
-            ui.label("System Prompt").classes("tf-label")
-            UI["prompt_textarea"] = ui.textarea(value=state.settings.get("system_prompt")) \
-                .classes("w-full h-32").props("outlined dense") \
-                .on_value_change(lambda e: set_setting("system_prompt", e.value))
+            ui.label("System Prompt 预设").classes("tf-label")
+            UI["prompt_select"] = ui.select(PROMPT_PRESETS, label="选择预设",
+                                            value=state.settings.get("prompt_preset"),
+                                            on_change=on_prompt_preset_change) \
+                .props("outlined dense").classes("w-full")
+            UI["prompt_textarea"] = ui.textarea(label="提示词内容（可直接编辑）",
+                                                value=state.settings.get("system_prompt")) \
+                .classes("w-full h-36").props("outlined dense") \
+                .on_value_change(on_prompt_text_change)
             ui.button("恢复默认", on_click=restore_default_prompt).props("flat dense")
+            ui.label("选择预设自动填充；手动编辑提示词将切为「自定义」") \
+                .classes("tf-muted text-xs")
 
             ui.label("触发词前缀").classes("tf-label")
             ui.input(value=state.settings.get("tag_prefix")) \

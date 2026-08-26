@@ -55,7 +55,8 @@ docker compose up -d
 - 选择「模型预设」，或手动填 Base URL 与模型名；
 - 填写 API Key（本地 Ollama 可留空，Base URL 填 `http://<host>:11434/v1`）；
 - 选择「打标模式」：短标签（逗号分隔）或自然语言描述；
-- 可自定义 System Prompt、触发词前缀、并发数。
+- 「System Prompt 预设」下拉框：**随打标模式** / **角色 LoRA 训练** / **服装 LoRA 训练** / **风格 LoRA 训练** / **自定义**。选预设自动填充下方文本框（可再手动微调，微调后自动视为「自定义」）；
+- 可设置触发词前缀、并发数。
 
 > 兼容性说明：Claude 官方 API 非 OpenAI 兼容，需中转站；DeepSeek-VL 需自建 /v1 端点；Ollama 端口须带 /v1。
 
