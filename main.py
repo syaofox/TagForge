@@ -36,16 +36,26 @@ SETTINGS_FILE = CONFIG / "settings.json"
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 
+# 两种打标模式的默认 System Prompt（供文本框与「恢复默认」共用）
+DEFAULT_PROMPTS = {
+    "short": (
+        "You are an image captioning assistant. "
+        "Generate 5-10 comma-separated tags (danbooru style, lowercase) for the image. "
+        "Output only the tags."
+    ),
+    "natural": (
+        "You are an image captioning assistant. "
+        "Describe the image in one detailed natural-language sentence. "
+        "Output only the sentence."
+    ),
+}
+
 DEFAULT_SETTINGS = {
     "api_key": "",
     "base_url": "https://api.openai.com/v1",
     "model": "gpt-4o-mini",
     "mode": "short",
-    "system_prompt": (
-        "You are an image captioning assistant. "
-        "Generate 5-10 comma-separated tags (danbooru style, lowercase) for the image. "
-        "Output only the tags."
-    ),
+    "system_prompt": DEFAULT_PROMPTS["short"],
     "tag_prefix": "",
     "prefix_mode": "prepend",
     "dark": False,
@@ -677,9 +687,27 @@ def on_preset_change(e: events.ValueChangeEventArguments) -> None:
 
 
 def restore_default_prompt() -> None:
-    UI["prompt_textarea"].value = DEFAULT_SETTINGS["system_prompt"]
-    set_setting("system_prompt", DEFAULT_SETTINGS["system_prompt"])
-    ui.notify("已恢复默认提示词")
+    default = DEFAULT_PROMPTS.get(state.settings.get("mode", "short"), DEFAULT_PROMPTS["short"])
+    UI["prompt_textarea"].value = default
+    set_setting("system_prompt", default)
+    ui.notify("已恢复该模式的默认提示词")
+
+
+def on_mode_change(e: events.ValueChangeEventArguments) -> None:
+    """切换打标模式：
+    1) 提示词未被自定义（与当前模式默认一致）时，自动换成新模式的默认提示词；
+    2) 用户自定义过则保留自定义内容（自定义始终优先），仅提示。
+    """
+    new_mode = e.value
+    old_mode = state.settings.get("mode", "short")
+    current = (UI["prompt_textarea"].value or "").strip()
+    if current == DEFAULT_PROMPTS.get(old_mode, "").strip():
+        default = DEFAULT_PROMPTS.get(new_mode, DEFAULT_PROMPTS["short"])
+        UI["prompt_textarea"].value = default
+        set_setting("system_prompt", default)
+    else:
+        ui.notify("已保留自定义提示词（自定义内容优先，不被模式切换覆盖）", type="info")
+    set_setting("mode", new_mode)
 
 
 # ---------------- 界面构建 ----------------
@@ -828,8 +856,10 @@ def build_ui() -> None:
             ui.separator()
             ui.label("打标模式").classes("tf-label")
             ui.radio({"short": "短标签（逗号分隔）", "natural": "自然语言描述"},
-                     value=state.settings.get("mode"), on_change=lambda e: set_setting("mode", e.value)) \
+                     value=state.settings.get("mode"), on_change=on_mode_change) \
                 .props("dense")
+            ui.label("提示词与模式默认一致时随模式切换；自定义后优先使用自定义内容") \
+                .classes("tf-muted text-xs")
 
             ui.label("System Prompt").classes("tf-label")
             UI["prompt_textarea"] = ui.textarea(value=state.settings.get("system_prompt")) \
