@@ -538,12 +538,15 @@ def render_detail() -> None:
                 .classes("w-full max-h-96 object-contain rounded-xl")
             state.tagbox = ui.textarea(label="标签文本", value=read_label(state.current, entry.name)) \
                 .classes("w-full").props("outlined dense")
-            with ui.row().classes("w-full gap-2"):
-                ui.button("保存", icon="save", on_click=save_tag) \
+            with ui.row().classes("w-full gap-2 items-center"):
+                UI["save_btn"] = ui.button("保存", icon="save", on_click=save_tag) \
                     .props("unelevated rounded color=green-7").classes("flex-1")
-                ui.button("重新生成", icon="auto_awesome", on_click=regenerate) \
-                    .props("unelevated rounded color=blue-7").classes("flex-1")
-                ui.button("删除图片", icon="delete", on_click=confirm_delete) \
+                with ui.row().classes("items-center gap-1 no-wrap"):
+                    UI["regenerate_btn"] = ui.button("重新生成", icon="auto_awesome",
+                                                     on_click=regenerate) \
+                        .props("unelevated rounded color=blue-7").classes("flex-1")
+                    UI["gen_spinner"] = ui.spinner(size="sm", color="blue-7").set_visibility(False)
+                UI["delete_btn"] = ui.button("删除图片", icon="delete", on_click=confirm_delete) \
                     .props("flat rounded color=red-6").classes("shrink-0")
             with ui.row().classes("w-full items-center justify-between pt-1"):
                 ui.button(icon="navigate_before", on_click=prev_img).props("round outline color=primary")
@@ -561,11 +564,30 @@ def save_tag() -> None:
     ui.notify("已保存")
 
 
+def set_generating_ui(generating: bool) -> None:
+    """切换「重新生成」进行中的 UI 状态：按钮置灰/文案、菊花、并锁定保存/删除。"""
+    try:
+        for key in ("save_btn", "delete_btn"):
+            el = UI.get(key)
+            if el is not None:
+                el.set_enabled(not generating)
+        btn = UI.get("regenerate_btn")
+        if btn is not None:
+            btn.set_enabled(not generating)
+            btn.set_text("生成中…" if generating else "重新生成")
+        sp = UI.get("gen_spinner")
+        if sp is not None:
+            sp.set_visibility(generating)
+    except Exception:
+        pass  # 详情面板可能已被关闭/重建
+
+
 async def regenerate() -> None:
     if not ensure_client():
         return
     entry = state.entries[state.index]
     set_badge(entry, "processing")
+    set_generating_ui(True)  # 立即给出“正在生成”反馈
     try:
         data = "data:image/jpeg;base64," + base64.b64encode(
             await run.io_bound(encode_for_api, entry.path)).decode("ascii")
@@ -585,6 +607,8 @@ async def regenerate() -> None:
     except Exception as e:
         set_badge(entry, "failed")
         ui.notify(f"生成失败：{e}", type="negative")
+    finally:
+        set_generating_ui(False)
 
 
 async def load_preview(i: int) -> None:
