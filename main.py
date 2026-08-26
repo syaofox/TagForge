@@ -269,6 +269,11 @@ class AppState:
     view_query: str = ""  # 搜索词（文件名或标签）
     view_page: int = 1  # 已加载的分页数（每页 PAGE_SIZE）
     search_seq: int = 0  # 搜索防抖序号
+    upload_ok: int = 0  # 本轮上传成功张数
+    upload_fail: int = 0  # 本轮上传失败张数
+    upload_renamed: int = 0  # 本轮同名自动改名张数
+    batch_log_lines: list = field(default_factory=list)  # 批量日志（供复制）
+    batch_log_visible: bool = True  # 批量日志区展开/收起
 
 
 state = AppState()
@@ -858,6 +863,16 @@ def do_delete() -> None:
 
 
 # ---------------- 上传 ----------------
+# ---------------- 上传 ----------------
+def on_upload_begin(e: events.UiEventArguments) -> None:
+    """上传开始提示（本版 NiceGUI 无字节级进度事件，用状态提示代替）。"""
+    try:
+        UI["upload_status"].set_text("上传中…")
+        UI["upload_status"].set_visibility(True)
+    except Exception:
+        pass
+
+
 async def on_upload(e: events.UploadEventArguments) -> None:
     if not state.current:
         ui.notify("请先选择项目", type="warning")
@@ -865,22 +880,46 @@ async def on_upload(e: events.UploadEventArguments) -> None:
     file = e.file
     name = file.name or ""
     if Path(name).suffix.lower() not in IMAGE_EXTS:
-        ui.notify(f"不支持的文件类型：{name}", type="negative")
+        state.upload_fail += 1
         return
     dst = images_dir(state.current) / name
     dst.parent.mkdir(parents=True, exist_ok=True)
-    await file.save(dst)
-    # 同名覆盖策略：清除旧同名 .txt 标签
-    lp = label_file(state.current, name)
-    if lp.exists():
-        lp.unlink()
-    ui.notify(f"已上传 {name}")
-    await refresh_grid()
+    if dst.exists():  # 同名自动改名，避免误覆盖
+        stem, ext = name.rsplit(".", 1)
+        i = 1
+        while True:
+            alt = f"{stem} ({i}).{ext}"
+            if not (images_dir(state.current) / alt).exists():
+                dst = images_dir(state.current) / alt
+                state.upload_renamed += 1
+                break
+            i += 1
+    try:
+        await file.save(dst)
+        state.upload_ok += 1
+    except Exception:
+        state.upload_fail += 1
 
 
-# ---------------- 批量标注 ----------------
+def on_multi_upload(e: events.MultiUploadEventArguments) -> None:
+    """本次选择上传完成：汇总提示 + 刷新网格（P0-5）。"""
+    UI["upload_status"].set_visibility(False)
+    ok, fail, ren = state.upload_ok, state.upload_fail, state.upload_renamed
+    state.upload_ok = state.upload_fail = state.upload_renamed = 0
+    if ok:
+        msg = f"已上传 {ok} 张"
+        if ren:
+            msg += f"（{ren} 张同名已自动改名）"
+        ui.notify(msg, type="positive", timeout=4000)
+    if fail:
+        ui.notify(f"{fail} 张上传失败（类型不支持或写入出错）", type="negative", timeout=5000)
+    background_tasks.create(refresh_grid())
+
+
+# ---------------- 批量标注（P0-6：主区进度卡） ----------------
 def add_log(text: str) -> None:
-    box = UI["batch_log"]
+    state.batch_log_lines.append(text)
+    box = UI.get("batch_log")
     if box is not None:
         with box:
             ui.label(text).classes("text-xs font-mono")
@@ -896,12 +935,33 @@ def start_batch() -> None:
     if not targets:
         ui.notify("当前项目没有待标注或失败的图片", type="info")
         return
+    launch_batch(targets)
+
+
+def retry_failed() -> None:
+    """一键重试所有失败图片（P0-6）。"""
+    failed = [e for e in state.entries if e.status == "failed"]
+    if not failed:
+        ui.notify("没有可重试的失败图片", type="info")
+        return
+    if ensure_client():
+        launch_batch(failed)
+
+
+def launch_batch(targets: list) -> None:
+    """启动批量任务并显示主区进度卡。"""
     state.abort_batch = False
-    UI["batch_total"].set_text(f"待处理 {len(targets)} 张")
+    UI["batch_status"].set_text("处理中…")
     UI["batch_progress"].value = 0.0
+    UI["batch_stats"].set_text(f"待处理 {len(targets)} 张 · ✅ 0 · ❌ 0")
     UI["batch_log"].clear()
+    state.batch_log_lines.clear()
+    UI["batch_log_area"].set_visibility(True)
+    state.batch_log_visible = True
+    UI["batch_stop_btn"].set_enabled(True)
+    UI["batch_retry_btn"].set_visibility(False)
+    UI["batch_card"].set_visibility(True)
     UI["main_progress"].set_visibility(True)
-    UI["batch_modal"].open()
     state.batch = background_tasks.create(run_batch(targets))
 
 
@@ -911,25 +971,44 @@ def stop_batch() -> None:
         add_log("⏹ 已请求终止…")
 
 
-def close_batch_modal() -> None:
-    UI["batch_modal"].close()
+def collapse_batch() -> None:
+    """收起进度卡（后台继续跑），进度可在顶栏看到。"""
+    UI["batch_card"].set_visibility(False)
 
 
-def run_in_background() -> None:
-    close_batch_modal()
-    ui.notify("已在后台运行，可在顶栏查看进度")
+def toggle_batch_log() -> None:
+    state.batch_log_visible = not state.batch_log_visible
+    UI["batch_log_area"].set_visibility(state.batch_log_visible)
+
+
+def clear_batch_log() -> None:
+    UI["batch_log"].clear()
+    state.batch_log_lines.clear()
+
+
+def copy_batch_log() -> None:
+    lines = "\n".join(state.batch_log_lines)
+    if not lines:
+        ui.notify("日志为空", type="info")
+        return
+    payload = json.dumps(lines)
+    ui.run_javascript(f"navigator.clipboard.writeText({payload}).catch(()=>{{}});")
+    ui.notify("已复制日志到剪贴板")
 
 
 async def run_batch(targets: list) -> None:
     sem = asyncio.Semaphore(int(state.settings.get("concurrency") or 5))
     total = len(targets)
     done = 0
+    ok_count = 0
+    fail_count = 0
+    batch_start = time.perf_counter()
     prop = state.settings.get("system_prompt", "")
     prefix = state.settings.get("tag_prefix", "")
     prefix_mode = state.settings.get("prefix_mode", "prepend")
 
     async def process(entry: ImageEntry) -> None:
-        nonlocal done
+        nonlocal done, ok_count, fail_count
         if state.abort_batch:
             return
         async with sem:
@@ -945,18 +1024,24 @@ async def run_batch(targets: list) -> None:
                 write_label(state.current, entry.name, final)
                 set_badge(entry, "tagged")
                 update_card_caption(entry)
+                ok_count += 1
                 add_log(f"{entry.name} ✅ 成功 ({time.perf_counter() - t0:.1f}s)")
             except FatalAPIError as e:
                 set_badge(entry, "failed")
+                fail_count += 1
                 add_log(f"{entry.name} ⚠️ {e}")
                 state.abort_batch = True
             except Exception as e:
                 set_badge(entry, "failed")
+                fail_count += 1
                 add_log(f"{entry.name} ❌ 失败：{e}")
             finally:
                 done += 1
                 UI["batch_progress"].value = done / total
                 UI["main_progress"].value = done / total
+                UI["batch_stats"].set_text(
+                    f"完成 {done}/{total} · ✅ {ok_count} · ❌ {fail_count} · "
+                    f"⏱ {time.perf_counter() - batch_start:.0f}s")
 
     try:
         results = await asyncio.gather(*(process(t) for t in targets), return_exceptions=True)
@@ -965,19 +1050,29 @@ async def run_batch(targets: list) -> None:
         for t in targets:
             if t.status == "processing":
                 set_badge(t, "pending")
+        UI["batch_status"].set_text("⏹ 已终止")
+        UI["batch_stop_btn"].set_enabled(False)
         raise
     finally:
         UI["main_progress"].set_visibility(False)
 
-    if any(isinstance(r, FatalAPIError) for r in results):
+    if state.abort_batch:
+        add_log(f"⏹ 已终止（本次完成 {done}/{total}）")
+        UI["batch_status"].set_text(f"⏹ 已终止（本次完成 {done}/{total}）")
+    elif any(isinstance(r, FatalAPIError) for r in results):
         add_log("⚠️ 批量中止：API Key/权限错误或重试后仍失败")
         for t in targets:
             if t.status == "processing":
                 set_badge(t, "pending")
+        UI["batch_status"].set_text("⚠️ 批量中止")
     else:
-        ok = sum(1 for t in targets if t.status == "tagged")
-        add_log(f"🎉 完成：成功 {ok} / {total}")
+        add_log(f"🎉 完成：成功 {ok_count} / {total}（失败 {fail_count}）")
+        UI["batch_status"].set_text(f"✅ 完成（成功 {ok_count} · 失败 {fail_count}）")
 
+    if fail_count > 0:
+        UI["batch_retry_btn"].set_text(f"重试失败 {fail_count}")
+        UI["batch_retry_btn"].set_visibility(True)
+    UI["batch_stop_btn"].set_enabled(False)
     state.abort_batch = False
     update_tokens()
 
@@ -1378,11 +1473,15 @@ def build_ui() -> None:
             with ui.row().classes("w-full items-center gap-3 flex-wrap"):
                 UI["toolbar_title"] = ui.label("（未选择项目）").classes("tf-toolbar-title")
                 with ui.element("div").classes("inline-flex"):
-                    UI["uploader"] = ui.upload(multiple=True, auto_upload=True, on_upload=on_upload) \
+                    UI["uploader"] = ui.upload(multiple=True, auto_upload=True,
+                                               on_upload=on_upload,
+                                               on_begin_upload=on_upload_begin,
+                                               on_multi_upload=on_multi_upload) \
                         .classes("hidden")
                     ui.button("上传图片", icon="upload",
                               on_click=lambda: UI["uploader"].run_method("pickFiles")) \
                         .props("unelevated rounded color=indigo-9")
+                UI["upload_status"] = ui.label("").classes("tf-muted text-xs").set_visibility(False)
                 UI["batch_button"] = ui.button("开始批量标注", icon="auto_awesome", on_click=start_batch) \
                     .props("unelevated rounded color=primary").set_enabled(client_ready())
                 UI["main_progress"] = ui.linear_progress(value=0.0, show_value=True) \
@@ -1396,6 +1495,33 @@ def build_ui() -> None:
                              "配置后点「测试连接」验证可用后再批量标注。") \
                         .classes("tf-muted text-xs")
             UI["api_banner"].set_visibility(False)
+            with ui.card().props("flat").classes("tf-toolbar tf-wide mt-2 p-4 gap-2 tf-batch-card") as UI["batch_card"]:
+                with ui.row().classes("w-full items-center justify-between"):
+                    ui.label("批量标注").classes("tf-text font-bold")
+                    UI["batch_status"] = ui.label("处理中…").classes("text-sm")
+                    ui.button(icon="close", on_click=collapse_batch) \
+                        .props("flat round color=grey-7").tooltip("收起（后台继续，进度见顶栏）")
+                UI["batch_progress"] = ui.linear_progress(value=0.0, show_value=True).classes("w-full")
+                UI["batch_stats"] = ui.label("").classes("tf-muted text-sm")
+                with ui.row().classes("w-full items-center justify-between flex-wrap gap-2"):
+                    UI["batch_stop_btn"] = ui.button("终止", icon="stop", on_click=stop_batch) \
+                        .props("unelevated rounded color=red-6")
+                    with ui.row().classes("items-center gap-1"):
+                        UI["batch_log_toggle"] = ui.button("日志", icon="list_alt",
+                                                           on_click=toggle_batch_log) \
+                            .props("flat dense rounded")
+                        UI["batch_log_clear_btn"] = ui.button("清空", icon="cleaning_services",
+                                                              on_click=clear_batch_log) \
+                            .props("flat dense rounded")
+                        UI["batch_copy_btn"] = ui.button("复制", icon="content_copy",
+                                                         on_click=copy_batch_log) \
+                            .props("flat dense rounded")
+                        UI["batch_retry_btn"] = ui.button("重试失败", icon="refresh",
+                                                          on_click=retry_failed) \
+                            .props("unelevated rounded color=amber-7").set_visibility(False)
+                with ui.column().classes("w-full h-32 overflow-y-auto tf-log p-2 gap-1") as UI["batch_log_area"]:
+                    UI["batch_log"] = ui.column().classes("w-full gap-1")
+            UI["batch_card"].set_visibility(False)
             UI["grid"] = ui.grid(columns="repeat(auto-fill, minmax(190px, 1fr))") \
                 .classes("tf-wide gap-4")
             UI["load_more_btn"] = ui.button("加载更多", icon="expand_more",
@@ -1408,21 +1534,6 @@ def build_ui() -> None:
         .classes("tf-drawer")
 
     # ---- 弹窗 ----
-    with ui.dialog() as UI["batch_modal"]:
-        with ui.card().props("flat").classes("tf-card gap-3 p-5") \
-                .style("width: 560px; max-width: 92vw;"):
-            with ui.row().classes("w-full items-center justify-between"):
-                ui.label("批量标注").classes("tf-text text-lg font-bold")
-                ui.button(icon="close", on_click=close_batch_modal).props("flat round color=grey-7")
-            UI["batch_total"] = ui.label("").classes("tf-muted text-sm")
-            UI["batch_progress"] = ui.linear_progress(value=0.0, show_value=True).classes("w-full")
-            with ui.column().classes("w-full h-64 overflow-y-auto tf-log p-3"):
-                UI["batch_log"] = ui.column().classes("w-full gap-1")
-            with ui.row().classes("w-full items-center justify-between"):
-                ui.button("后台运行", icon="play_arrow", on_click=run_in_background) \
-                    .props("unelevated rounded color=primary")
-                ui.button("终止", icon="stop", on_click=stop_batch).props("unelevated rounded color=red-6")
-
     with ui.dialog() as UI["help_dialog"]:
         pass
 
