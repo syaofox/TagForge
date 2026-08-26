@@ -298,6 +298,7 @@ class AppState:
     upload_renamed: int = 0  # 本轮同名自动改名张数
     batch_log_lines: list = field(default_factory=list)  # 批量日志（供复制）
     batch_log_visible: bool = True  # 批量日志区展开/收起
+    batch_queue: Optional[Any] = None  # 批量进度 SSE 桥（app.py 创建）
 
 
 state = AppState()

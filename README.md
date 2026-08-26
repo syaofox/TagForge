@@ -1,15 +1,17 @@
 # ⚒️ TagForge
 
-LoRA 数据集图片打标工具：Web 端批量标注（Python + NiceGUI，零数据库，文件系统存储）。
+LoRA 数据集图片打标工具：Web 端批量标注（Python + FastAPI + Jinja2 + HTMX，零数据库，文件系统存储）。
 单机 / 局域网单人使用。
 
 ## 一、目录结构
 
 ```
 TagForge/
-├─ main.py               # 应用入口（UI + 事件 + 扫描逻辑）
+├─ app.py                # FastAPI 入口（路由 + 渲染，业务逻辑在 core.py）
+├─ core.py               # 纯业务逻辑（0 框架依赖，可单测）
 ├─ llm_client.py         # OpenAI 兼容大模型异步封装
-├─ requirements.txt      # 依赖清单（与 Docker 共用，唯一来源）
+├─ requirements.txt      # 依赖清单（与 Docker 共用，唯一来源；前端仅 vendor 单文件 htmx.min.js，无构建步骤）
+├─ templates/  static/   # Jinja2 模板 + CSS/JS/htmx（服务端渲染，无前端构建）
 ├─ Dockerfile
 ├─ docker-compose.yml
 ├─ doc/设计.md           # 需求与实现约定
@@ -34,10 +36,12 @@ source .venv/bin/activate        # Windows: .venv\Scripts\activate
 uv pip install -r requirements.txt
 
 # 3) 启动
-python main.py                   # 打开 http://localhost:8080
+python -m uvicorn app:app --host 0.0.0.0 --port 8080   # 打开 http://localhost:8080
 ```
 
 新增依赖：修改 `requirements.txt` 后再次 `uv pip install -r requirements.txt`。
+
+> 架构说明：UI 层为 FastAPI + Jinja2 服务端渲染 + HTMX 局部刷新（见 `doc/重构方案-FastAPI-HTMX.md`）；业务逻辑全部在 `core.py`，不依赖任何 Web 框架。
 
 ## 三、Docker 部署
 

@@ -234,4 +234,187 @@
     mainEl.addEventListener("drop", (e) => { e.preventDefault(); sendUploads(e.dataTransfer && e.dataTransfer.files); });
   }
 
+
+  // ---------- 批量标注（SSE 进度） ----------
+  let batchES = null;
+  function showBatchCard(v) { const c = $("#batch-card"); if (c) c.hidden = !v; }
+  function batchSetStatus(t) { const el = $("#batch-status"); if (el) el.textContent = t; }
+  function batchSetProgress(v) { const p = $("#batch-progress"); if (p) p.value = v; }
+  function batchAppendLog(line) {
+    const box = $("#batch-log");
+    if (!box) return;
+    box.hidden = false;
+    const div = document.createElement("div");
+    div.textContent = line;
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+  }
+  function batchFinish(d) {
+    batchSetStatus(d.aborted ? "⏹ 已终止（本次完成 " + d.done + "/" + d.total + "）" : "✅ 完成（成功 " + d.ok + " · 失败 " + d.fail + "）");
+    const stop = $("#btn-batch-stop"); if (stop) stop.disabled = true;
+    const mp = $("#main-progress"); if (mp) mp.hidden = true;
+    if (d.fail > 0) {
+      const rb = $("#btn-retry-failed");
+      if (rb) { rb.textContent = "重试失败 " + d.fail; rb.hidden = false; }
+    }
+  }
+  function startBatchSSE() {
+    if (batchES) batchES.close();
+    showBatchCard(true);
+    batchSetProgress(0);
+    const st = $("#batch-stats"); if (st) st.textContent = "";
+    const lg = $("#batch-log"); if (lg) { lg.hidden = true; lg.innerHTML = ""; }
+    const rb = $("#btn-retry-failed"); if (rb) rb.hidden = true;
+    const stop = $("#btn-batch-stop"); if (stop) stop.disabled = false;
+    batchSetStatus("处理中…");
+    const mp = $("#main-progress"); if (mp) { mp.hidden = false; mp.value = 0; }
+    let done = false;
+    batchES = new EventSource("/api/batch/events");
+    batchES.addEventListener("progress", (e) => {
+      const d = JSON.parse(e.data);
+      batchSetProgress(d.total ? d.done / d.total : 0);
+      const st = $("#batch-stats");
+      if (st) st.textContent = "完成 " + d.done + "/" + d.total + " · ✅ " + d.ok + " · ❌ " + d.fail + " · ⏱ " + Math.round(d.elapsed) + "s";
+    });
+    batchES.addEventListener("log", (e) => batchAppendLog(JSON.parse(e.data).text));
+    batchES.addEventListener("done", (e) => {
+      done = true;
+      batchFinish(JSON.parse(e.data));
+      batchES.close(); batchES = null;
+      refreshGrid();
+      document.dispatchEvent(new CustomEvent("tokensUpdated"));
+    });
+    batchES.onerror = () => {
+      if (done) return;
+      batchES.close(); batchES = null;
+      batchFinish({ aborted: false, ok: 0, fail: 0, done: 0, total: 0 });
+      refreshGrid();
+      document.dispatchEvent(new CustomEvent("tokensUpdated"));
+    };
+  }
+  document.addEventListener("batchStarted", startBatchSSE);
+  $("#btn-batch")?.addEventListener("click", () => htmx.ajax("POST", "/api/batch/start", { swap: "none" }));
+  $("#btn-batch-stop")?.addEventListener("click", () => fetch("/api/batch/stop", { method: "POST" }));
+  $("#btn-retry-failed")?.addEventListener("click", () => htmx.ajax("POST", "/api/batch/retry", { swap: "none" }));
+  $("#btn-collapse-batch")?.addEventListener("click", () => showBatchCard(false));
+  $("#btn-log-toggle")?.addEventListener("click", () => { const l = $("#batch-log"); if (l) l.hidden = !l.hidden; });
+  $("#btn-log-clear")?.addEventListener("click", () => { const l = $("#batch-log"); if (l) l.innerHTML = ""; });
+  $("#btn-log-copy")?.addEventListener("click", () => {
+    const lines = Array.from(document.querySelectorAll("#batch-log div")).map((d) => d.textContent).join("\n");
+    if (!lines) { TF.toast("日志为空", "info"); return; }
+    navigator.clipboard.writeText(lines).then(() => TF.toast("已复制日志到剪贴板")).catch(() => TF.toast("复制失败", "negative"));
+  });
+
+  // ---------- 导出 / 测试连接 / 试生成 ----------
+  $("#btn-export")?.addEventListener("click", () => {
+    const project = $("#toolbar-title")?.textContent;
+    if (!project || project === "（未选择项目）") { TF.toast("请先选择项目", "warning"); return; }
+    const a = document.createElement("a");
+    a.href = "/api/export/" + encodeURIComponent(project);
+    a.download = "";
+    a.click();
+  });
+  $("#btn-test-conn")?.addEventListener("click", async () => {
+    const btn = $("#btn-test-conn");
+    const orig = btn.textContent;
+    btn.disabled = true; btn.textContent = "测试中…";
+    TF.saveSetting("base_url", $("#base-url").value);
+    TF.saveSetting("model", $("#model-name").value);
+    TF.saveSetting("api_key", $("#api-key").value);
+    try {
+      const r = await fetch("/api/test-connection", { method: "POST" });
+      const j = await r.json();
+      TF.toast(j.detail || (j.ok ? "✅ API 可用" : "❌ 连接失败"), j.ok ? "positive" : "negative", 9000);
+    } catch (_) { TF.toast("测试请求失败", "negative"); }
+    btn.disabled = false; btn.textContent = orig;
+  });
+  $("#btn-trial")?.addEventListener("click", () => htmx.ajax("POST", "/api/trial", { swap: "none" }));
+
+  // ---------- 顶栏 Tokens ----------
+  document.addEventListener("tokensUpdated", async () => {
+    try {
+      const r = await fetch("/api/status/tokens");
+      const j = await r.json();
+      const el = $("#header-tokens");
+      if (el) el.textContent = "Tokens：" + (j.total || 0);
+    } catch (_) {}
+  });
+
+  // ---------- 帮助 ----------
+  $("#btn-help")?.addEventListener("click", () => openDialog("dlg-help"));
+
+
+  // ---------- 设置表单：失焦/变更即存 ----------
+  const settingBind = [
+    ["#base-url", "base_url", "text", true],
+    ["#model-name", "model", "text", false],
+    ["#api-key", "api_key", "text", true],
+    ["#tag-prefix", "tag_prefix", "text", false],
+    ["#concurrency", "concurrency", "int", false],
+    ["#character-name", "character_name", "text", false],
+  ];
+  settingBind.forEach(([sel, key, kind, debounce]) => {
+    const el = $(sel);
+    if (!el) return;
+    const save = () => {
+      let v = el.value;
+      if (kind === "int") v = parseInt(v, 10) || 1;
+      TF.saveSetting(key, v);
+    };
+    el.addEventListener("change", save);
+    if (debounce) el.addEventListener("input", () => TF.saveSettingDebounced(key, el));
+  });
+  $('input[name="prefix-mode"]').forEach((r) => r.addEventListener("change", () => TF.saveSetting("prefix_mode", r.value)));
+
+  // 模型预设：回填 Base URL / 模型 / 该预设记忆的 Key
+  $("#model-preset")?.addEventListener("change", async () => {
+    const name = $("#model-preset").value;
+    const resp = await fetch("/api/settings/preset/" + encodeURIComponent(name));
+    if (!resp.ok) return;
+    const j = await resp.json();
+    $("#base-url").value = j.base_url;
+    $("#model-name").value = j.model;
+    if (j.api_key) $("#api-key").value = j.api_key;
+    await TF.saveSetting("base_url", j.base_url);
+    await TF.saveSetting("model", j.model);
+    if (j.api_key) await TF.saveSetting("api_key", j.api_key);
+    else TF.toast("该预设未保存 API Key，可手动填写（会自动记住到该预设）", "info", 3500);
+  });
+  // API Key 变更：记住到当前预设（若属于内置预设）
+  $("#api-key")?.addEventListener("change", async () => {
+    const key = $("#api-key").value.trim();
+    const preset = $("#model-preset").value;
+    if (key && preset) {
+      await fetch("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ preset_keys: { [preset]: key } }) });
+    }
+  });
+
+  // 提示词预设 / 文本框 / 恢复默认
+  $("#prompt-preset")?.addEventListener("change", async () => {
+    const r2 = await fetch("/api/settings/prompt", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt_preset: $("#prompt-preset").value }) });
+    const j = await r2.json();
+    $("#prompt-text").value = j.system_prompt || "";
+  });
+  $("#prompt-text")?.addEventListener("input", (e) => {
+    const sel = $("#prompt-preset");
+    if (sel && sel.value !== "custom") sel.value = "custom";
+    TF.saveSettingDebounced("system_prompt", e.target);
+  });
+  $("#btn-restore-prompt")?.addEventListener("click", async () => {
+    const r2 = await fetch("/api/settings/prompt/default", { method: "POST" });
+    const j = await r2.json();
+    $("#prompt-text").value = j.system_prompt;
+    $("#prompt-preset").value = j.prompt_preset;
+    TF.toast("已恢复为「英文 · 短标签 · 通用」默认提示词");
+  });
+  // 角色名变更：若当前预设为角色 LoRA，则用新名字重新解析提示词
+  $("#character-name")?.addEventListener("change", async () => {
+    const preset = $("#prompt-preset").value;
+    if (preset && preset !== "custom") {
+      const r2 = await fetch("/api/settings/prompt", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt_preset: preset }) });
+      const j = await r2.json();
+      $("#prompt-text").value = j.system_prompt || "";
+    }
+  });
+
 })();
