@@ -208,6 +208,7 @@ DEFAULT_SETTINGS = {
     "system_prompt": DEFAULT_PROMPTS["short"]["en"],
     "tag_prefix": "",
     "prefix_mode": "prepend",
+    "character_name": "",  # 角色 LoRA 的角色名（注入「角色 LoRA」预设提示词）
     "dark": False,
     "concurrency": 5,
     "last_project": "",
@@ -965,6 +966,31 @@ def on_prompt_text_change(e: events.ValueChangeEventArguments) -> None:
     set_setting("system_prompt", e.value or "")
 
 
+# 角色 LoRA 预设键（注入角色名用）
+CHARACTER_PRESETS = {
+    "en_short_character", "en_natural_character",
+    "zh_short_character", "zh_natural_character",
+}
+
+
+def resolve_prompt_text(preset: str | None = None) -> str:
+    """生成实际提示词文本 = 预设模板 + 角色名注入（仅「角色 LoRA」预设生效）。"""
+    preset = preset or state.settings.get("prompt_preset", "en_short_default")
+    if preset == "custom":
+        return state.settings.get("system_prompt", "")
+    lang, fmt, target = preset.split("_", 2)
+    text = (DEFAULT_PROMPTS[fmt][lang] if target == "default"
+            else TRAINING_PROMPTS[target][fmt][lang])
+    name = (state.settings.get("character_name") or "").strip()
+    if target == "character" and name:
+        if lang == "en":
+            text += (f" The character is named '{name}'; always refer to the character as "
+                     f"'{name}' and start every output with it.")
+        else:
+            text += f" 角色的名称为「{name}」，请始终用「{name}」称呼角色，并在输出开头带上它。"
+    return text
+
+
 def on_prompt_preset_change(e: events.ValueChangeEventArguments) -> None:
     """选择提示词预设：按「输出语言 × 格式 × 训练目标」填充对应提示词；「自定义」保留现有文本。
 
@@ -975,22 +1001,30 @@ def on_prompt_preset_change(e: events.ValueChangeEventArguments) -> None:
     if preset == "custom":
         save_settings()
         return
-    lang, fmt, target = preset.split("_", 2)
-    if target == "default":
-        text = DEFAULT_PROMPTS[fmt][lang]
-    else:
-        text = TRAINING_PROMPTS[target][fmt][lang]
+    text = resolve_prompt_text(preset)
     set_prompt_text(text)
     state.settings["system_prompt"] = text
     save_settings()
+
+
+def on_character_name_change(e: events.ValueChangeEventArguments) -> None:
+    """保存角色名；若当前预设为「角色 LoRA」，实时把名称注入提示词。"""
+    set_setting("character_name", e.value or "")
+    preset = state.settings.get("prompt_preset", "")
+    if preset in CHARACTER_PRESETS:
+        text = resolve_prompt_text(preset)
+        set_prompt_text(text)
+        state.settings["system_prompt"] = text
+        save_settings()
 
 
 def restore_default_prompt() -> None:
     """恢复为「英文 · 短标签 · 通用」并填入对应默认提示词。"""
     state.settings["prompt_preset"] = "en_short_default"
     UI["prompt_select"].value = "en_short_default"
-    set_prompt_text(DEFAULT_PROMPTS["short"]["en"])
-    state.settings["system_prompt"] = DEFAULT_PROMPTS["short"]["en"]
+    text = resolve_prompt_text("en_short_default")
+    set_prompt_text(text)
+    state.settings["system_prompt"] = text
     save_settings()
     ui.notify("已恢复为「英文 · 短标签 · 通用」默认提示词")
 
@@ -1159,6 +1193,15 @@ def build_ui() -> None:
                 .on_value_change(on_prompt_text_change)
             ui.button("恢复默认", on_click=restore_default_prompt).props("flat dense")
             ui.label("选择预设自动填充；手动编辑提示词将切为「自定义」") \
+                .classes("tf-muted text-xs")
+
+            ui.label("角色名（角色 LoRA）").classes("tf-label")
+            UI["character_name_input"] = ui.input(
+                label="角色名（如 mw_cyber_girl）",
+                value=state.settings.get("character_name")) \
+                .props("outlined dense").classes("w-full") \
+                .on_value_change(on_character_name_change)
+            ui.label("填写后，「角色 LoRA」预设会用该名称称呼角色并置于输出开头") \
                 .classes("tf-muted text-xs")
 
             ui.label("触发词前缀").classes("tf-label")
