@@ -35,6 +35,7 @@ CONFIG = ROOT / "config"
 SETTINGS_FILE = CONFIG / "settings.json"
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
+PAGE_SIZE = 60  # 网格每页加载张数（P0-3 分页）
 
 # 通用默认提示词（格式 × 输出语言）
 DEFAULT_PROMPTS = {
@@ -264,6 +265,10 @@ class AppState:
     index: int = 0
     tagbox: Optional[ui.textarea] = None
     suppress_prompt_sync: bool = False  # 程序性更新提示词时抑制「视为自定义」
+    view_filter: str = "all"  # 状态筛选：all/tagged/pending/failed
+    view_query: str = ""  # 搜索词（文件名或标签）
+    view_page: int = 1  # 已加载的分页数（每页 PAGE_SIZE）
+    search_seq: int = 0  # 搜索防抖序号
 
 
 state = AppState()
@@ -494,6 +499,7 @@ def update_card_caption(entry: ImageEntry) -> None:
 
 def set_badge(entry: ImageEntry, status: str) -> None:
     entry.status = status
+    update_stats()  # 统计条实时联动
     if entry.badge is not None:
         entry.badge.set_text(STATUS_TEXT[status])
         entry.badge.style(f"background:{soft_color(STATUS_COLOR[status])}; color:{STATUS_COLOR[status]};")
@@ -512,7 +518,7 @@ def refresh_project_list() -> None:
             for name in state.projects:
                 active = name == state.current
                 b = ui.button(name, on_click=lambda n=name: select_project(n)) \
-                    .props("dense align-left").classes("w-full justify-start rounded-lg")
+                    .props("dense align-left no-caps").classes("w-full justify-start rounded-lg")
                 if active:
                     b.props("unelevated color=primary").classes("text-white")
                 else:
@@ -531,35 +537,106 @@ def select_project(name: str) -> None:
     background_tasks.create(refresh_grid())
 
 
-async def refresh_grid() -> None:
+# ---------------- 网格：统计 / 筛选 / 分页 / 空态（P0-1~4） ----------------
+def compute_stats() -> dict:
+    """统计各状态图片数。"""
+    counts = {"all": 0, "tagged": 0, "pending": 0, "failed": 0, "processing": 0}
+    for e in state.entries:
+        counts[e.status] = counts.get(e.status, 0) + 1
+        counts["all"] += 1
+    return counts
+
+
+def update_stats() -> None:
+    """刷新统计条文字（批量/状态变化时调用）。"""
+    el = UI.get("stats_label")
+    if el is None:
+        return
+    c = compute_stats()
+    parts = [f"共 {c['all']} 张"]
+    for key, icon in (("tagged", "🟢 已标注"), ("pending", "🟡 待标注"),
+                      ("failed", "🔴 失败"), ("processing", "🔵 处理中")):
+        if c[key]:
+            parts.append(f"{icon} {c[key]}")
+    el.set_text(" · ".join(parts))
+
+
+def filtered_entries() -> list:
+    """按状态筛选 + 文本搜索（文件名或标签）后的条目列表。"""
+    items = state.entries
+    f = state.view_filter
+    if f != "all":
+        items = [e for e in items if e.status == f]
+    q = state.view_query.lower()
+    if q:
+        items = [e for e in items if q in e.name.lower() or q in e.label.lower()]
+    return items
+
+
+def render_meta_bar() -> None:
+    """构建统计 + 筛选 + 搜索条。"""
+    bar = UI["meta_bar"]
+    bar.clear()
+    with bar:
+        UI["stats_label"] = ui.label("").classes("tf-muted text-sm font-medium")
+        update_stats()
+        UI["filter_toggle"] = ui.toggle(
+            {"all": "全部", "tagged": "🟢 已标注", "pending": "🟡 待标注", "failed": "🔴 失败"},
+            value=state.view_filter, on_change=on_filter_change,
+        ).props("dense")
+        UI["search_input"] = ui.input(
+            placeholder="🔍 搜索文件名或标签…", value=state.view_query) \
+            .props("outlined dense clearable").classes("w-64") \
+            .on_value_change(on_search_change)
+
+
+def on_filter_change(e: events.ValueChangeEventArguments) -> None:
+    state.view_filter = e.value
+    state.view_page = 1
+    render_grid_page()
+
+
+def on_search_change(e: events.ValueChangeEventArguments) -> None:
+    """搜索输入：防抖 0.3s 后重绘网格。"""
+    state.view_query = (e.value or "").strip()
+    state.view_page = 1
+    state.search_seq += 1
+    background_tasks.create(_debounced_render(state.search_seq))
+
+
+async def _debounced_render(seq: int) -> None:
+    await asyncio.sleep(0.3)
+    if seq == state.search_seq:
+        render_grid_page()
+
+
+def load_more() -> None:
+    state.view_page += 1
+    render_grid_page()
+
+
+def render_grid_page() -> None:
+    """按当前筛选/分页渲染卡片；维护「加载更多」与空态。"""
     grid = UI["grid"]
     grid.clear()
-    if not state.current:
+    if not state.entries:
         with grid:
-            ui.label("😶 请先在左侧选择或新建一个项目。").classes("tf-muted py-10")
+            ui.label("📭 该项目还没有图片，点击顶栏「上传图片」开始。").classes("tf-muted py-10")
+        UI["load_more_btn"].set_visibility(False)
         return
-
-    imgs = project_images(state.current)
-    entries = [
-        ImageEntry(name=p.name, path=p, status=read_status(state.current, p.name),
-                   label=read_label(state.current, p.name))
-        for p in imgs
-    ]
-    # 并行生成缩略图（线程池），单张失败不影响整批
-    results = await asyncio.gather(
-        *(run.io_bound(make_thumb, state.current, e.name) for e in entries),
-        return_exceptions=True,
-    )
-    for e, r in zip(entries, results):
-        e.thumb = r if isinstance(r, str) else ""
-    state.entries = entries
-
+    items = filtered_entries()
+    if not items:
+        with grid:
+            ui.label("🔍 没有匹配的图片（试试清空筛选或搜索）。").classes("tf-muted py-10")
+        UI["load_more_btn"].set_visibility(False)
+        return
+    shown = items[: state.view_page * PAGE_SIZE]
     with grid:
-        for i, entry in enumerate(entries):
+        for entry in shown:
             card = ui.card().props("flat") \
                 .classes("tf-card") \
                 .mark("image-card") \
-                .on("click", lambda i=i: open_detail(i))
+                .on("click", lambda e0=entry: open_detail(state.entries.index(e0)))
             with card:
                 if entry.thumb:
                     ui.image(entry.thumb).classes("tf-card-img")
@@ -571,6 +648,55 @@ async def refresh_grid() -> None:
                 if not entry.label.strip():
                     entry.caption.set_visibility(False)  # 未标注不占位
                 ui.label(entry.name).classes("tf-card-name")
+    remain = len(items) - state.view_page * PAGE_SIZE
+    if remain > 0:
+        UI["load_more_btn"].set_visibility(True)
+        UI["load_more_btn"].set_text(f"加载更多（还有 {remain} 张）")
+    else:
+        UI["load_more_btn"].set_visibility(False)
+
+
+def render_api_banner() -> None:
+    """API 未就绪时显示提示条。"""
+    el = UI.get("api_banner")
+    if el is None:
+        return
+    el.set_visibility(not client_ready() and bool(state.current))
+
+
+async def refresh_grid() -> None:
+    grid = UI["grid"]
+    grid.clear()
+    if not state.current:
+        UI["meta_bar"].clear()
+        UI["api_banner"].set_visibility(False)
+        UI["load_more_btn"].set_visibility(False)
+        with grid:
+            ui.label("😶 请先在左侧选择或新建一个项目。").classes("tf-muted py-10")
+        return
+
+    imgs = project_images(state.current)
+    entries = [
+        ImageEntry(name=p.name, path=p, status=read_status(state.current, p.name),
+                   label=read_label(state.current, p.name))
+        for p in imgs
+    ]
+    if entries:
+        with grid:
+            ui.spinner(size="3em", color="primary")
+            ui.label("正在加载图片…").classes("tf-muted text-sm")
+    # 并行生成缩略图（线程池），单张失败不影响整批
+    results = await asyncio.gather(
+        *(run.io_bound(make_thumb, state.current, e.name) for e in entries),
+        return_exceptions=True,
+    )
+    for e, r in zip(entries, results):
+        e.thumb = r if isinstance(r, str) else ""
+    state.entries = entries
+    state.view_page = 1
+    render_meta_bar()
+    render_grid_page()
+    render_api_banner()
 
 
 # ---------------- 详情面板 ----------------
@@ -935,6 +1061,7 @@ def set_setting(key: str, value) -> None:
     state.settings[key] = value
     save_settings()
     UI["batch_button"].set_enabled(client_ready())
+    render_api_banner()
 
 
 def on_preset_change(e: events.ValueChangeEventArguments) -> None:
@@ -1261,9 +1388,20 @@ def build_ui() -> None:
                 UI["main_progress"] = ui.linear_progress(value=0.0, show_value=True) \
                     .classes("w-56").set_visibility(False)
 
-        with ui.column().classes("w-full items-center pt-4 pb-10"):
+        with ui.column().classes("w-full items-center pt-3 pb-10"):
+            UI["meta_bar"] = ui.row().classes("tf-wide items-center gap-3 flex-wrap my-1")
+            with ui.row().classes("tf-wide mt-2") as UI["api_banner"]:
+                with ui.card().props("flat").classes("tf-toolbar w-full px-4 py-2"):
+                    ui.label("⚠️ 尚未配置可用的 API（需 Base URL / 模型名；Ollama 之外还需 API Key）。"
+                             "配置后点「测试连接」验证可用后再批量标注。") \
+                        .classes("tf-muted text-xs")
+            UI["api_banner"].set_visibility(False)
             UI["grid"] = ui.grid(columns="repeat(auto-fill, minmax(190px, 1fr))") \
                 .classes("tf-wide gap-4")
+            UI["load_more_btn"] = ui.button("加载更多", icon="expand_more",
+                                            on_click=load_more) \
+                .props("outline rounded color=primary").classes("mt-4") \
+                .set_visibility(False)
 
     # ---- 右侧详情面板 ----
     UI["drawer"] = ui.right_drawer(value=False, fixed=True).props("width=40% bordered") \
