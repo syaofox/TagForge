@@ -780,7 +780,8 @@ def render_detail() -> None:
                     ui.label("◀ ▶ 可切换上一张 / 下一张").classes("tf-muted text-xs")
                 ui.button(icon="close", on_click=drawer.hide).props("flat round color=grey-7")
             UI["preview_img"] = ui.image(entry.preview or entry.thumb) \
-                .classes("w-full max-h-96 object-contain rounded-xl cursor-zoom-in") \
+                .props("fit=contain") \
+                .classes("w-full max-h-96 rounded-xl cursor-zoom-in") \
                 .on("click", open_lightbox).tooltip("点击放大（Esc 关闭）")
             state.tagbox = ui.textarea(label="标签文本", value=read_label(state.current, entry.name)) \
                 .classes("w-full").props("outlined dense") \
@@ -1698,6 +1699,7 @@ def build_ui() -> None:
     with ui.dialog() as UI["lightbox_dialog"]:
         with ui.card().classes("bg-transparent no-shadow"):
             UI["lightbox_img"] = ui.image("") \
+                .props("fit=contain") \
                 .classes("max-w-[94vw] max-h-[90vh] cursor-zoom-out") \
                 .on("click", lightbox_close)
             ui.label("点击图片或按 Esc 关闭").classes("tf-muted text-xs w-full text-center mt-1")
