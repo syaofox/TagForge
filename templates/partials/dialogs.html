@@ -1,0 +1,28 @@
+<dialog id="dlg-new-project" class="tf-dialog">
+  <div class="tf-dialog-card">
+    <h3 class="tf-dialog-title">新建项目</h3>
+    <input id="new-project-name" class="tf-input" type="text" placeholder="项目名称">
+    <div class="tf-dialog-actions">
+      <button class="btn btn-ghost" data-close>取消</button>
+      <button class="btn btn-primary" id="btn-confirm-new-project">创建</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="dlg-confirm" class="tf-dialog">
+  <div class="tf-dialog-card">
+    <p id="confirm-text" style="margin:0">确定执行该操作吗？</p>
+    <div class="tf-dialog-actions">
+      <button class="btn btn-ghost" data-close>取消</button>
+      <button class="btn btn-danger" id="btn-confirm-ok">确定</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="dlg-help" class="tf-dialog">
+  <div class="tf-dialog-card">
+    <h3 class="tf-dialog-title">TagForge — LoRA 数据集图片打标工具</h3>
+    <p class="tf-muted" style="margin:0">左侧配置模型并新建/选择项目；上传图片后点击卡片进行标注；「开始批量标注」会并发调用大模型为待标注/失败图片生成标签。</p>
+    <div class="tf-dialog-actions"><button class="btn btn-ghost" data-close>知道了</button></div>
+  </div>
+</dialog>

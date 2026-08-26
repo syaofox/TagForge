@@ -1,0 +1,12 @@
+<div class="tf-panel-head">
+  <button class="btn btn-primary btn-block" id="btn-new-project">＋ 新建项目</button>
+</div>
+<div id="project-list" class="tf-project-list">
+  {% for name in projects %}
+    <button type="button" class="btn tf-project-item {{ 'active' if name == current else '' }}"
+            data-project="{{ name }}">{{ name }}</button>
+  {% else %}
+    <div class="tf-empty">暂无项目</div>
+  {% endfor %}
+</div>
+<button class="btn btn-danger btn-block" id="btn-delete-project">删除项目</button>

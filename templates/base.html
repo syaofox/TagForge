@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh" data-theme="{{ 'dark' if settings.dark else 'light' }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TagForge — LoRA 图片打标工具</title>
+  <link rel="stylesheet" href="/static/css/tf.css">
+  <script src="/static/vendor/htmx.min.js" defer></script>
+  <script src="/static/js/app.js" defer></script>
+</head>
+<body>
+  <header id="app-header" class="tf-header">
+    <div class="tf-header-left">
+      <span class="tf-logo">⚒️ TagForge</span>
+      <span class="tf-tagline">LoRA 数据集图片打标工具</span>
+    </div>
+    <div class="tf-header-right">
+      <span id="header-model" class="tf-header-chip">模型：{{ settings.model }}</span>
+      <span id="header-tokens" class="tf-header-chip">Tokens：0</span>
+      <label class="tf-switch"><input type="checkbox" id="dark-switch" {{ 'checked' if settings.dark else '' }}> 深色</label>
+    </div>
+  </header>
+
+  <div id="app-body">
+    <aside id="app-drawer" class="tf-drawer">
+      <div class="tf-tabs" data-tabs>
+        <button class="tf-tab active" data-tab="panel-projects">项目</button>
+        <button class="tf-tab" data-tab="panel-settings">配置</button>
+        <button class="tf-tab" data-tab="panel-advanced">高级</button>
+      </div>
+      <div class="tf-drawer-body">
+        <section id="panel-projects" class="tf-tab-panel">
+          {% include "partials/projects.html" %}
+        </section>
+        <section id="panel-settings" class="tf-tab-panel" hidden>
+          {% include "partials/settings.html" %}
+        </section>
+        <section id="panel-advanced" class="tf-tab-panel" hidden>
+          {% include "partials/advanced.html" %}
+        </section>
+      </div>
+    </aside>
+    <main id="main">
+      {% include "partials/main.html" %}
+    </main>
+  </div>
+
+  <aside id="detail-drawer" class="tf-detail-drawer"></aside>
+  <div id="lightbox" class="tf-lightbox" hidden></div>
+
+  {% include "partials/dialogs.html" %}
+  <div id="toast-container"></div>
+</body>
+</html>

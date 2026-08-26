@@ -1,0 +1,33 @@
+<div class="tf-form">
+  <label class="tf-label">模型预设</label>
+  <select id="model-preset" class="tf-select">
+    {% for name in model_presets %}
+      <option value="{{ name }}">{{ name }}</option>
+    {% endfor %}
+  </select>
+  <label class="tf-label">Base URL</label>
+  <input id="base-url" class="tf-input" type="text" value="{{ settings.base_url }}">
+  <label class="tf-label">模型名</label>
+  <input id="model-name" class="tf-input" type="text" value="{{ settings.model }}">
+  <label class="tf-label">API Key</label>
+  <input id="api-key" class="tf-input" type="password" value="{{ settings.api_key }}">
+  <button class="btn btn-primary" id="btn-test-conn">测试连接</button>
+
+  <hr class="tf-sep">
+  <label class="tf-label">提示词预设</label>
+  <select id="prompt-preset" class="tf-select">
+    {% for value, label in prompt_presets.items() %}
+      <option value="{{ value }}" {{ 'selected' if settings.prompt_preset == value else '' }}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <label class="tf-label">提示词内容（可直接编辑）</label>
+  <textarea id="prompt-text" class="tf-input tf-textarea" rows="8">{{ settings.system_prompt }}</textarea>
+  <div class="tf-detail-actions">
+    <button class="btn btn-ghost" id="btn-restore-prompt">恢复默认</button>
+  </div>
+  <div class="tf-muted tf-hint">选择预设自动填充；手动编辑提示词将切为「自定义」</div>
+
+  <label class="tf-label">角色名（角色 LoRA）</label>
+  <input id="character-name" class="tf-input" type="text" value="{{ settings.character_name }}" placeholder="如 mw_cyber_girl">
+  <div class="tf-muted tf-hint">填写后，「角色 LoRA」预设会用该名称称呼角色并置于输出开头</div>
+</div>

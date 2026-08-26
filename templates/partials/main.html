@@ -1,0 +1,23 @@
+<div class="tf-main-wrap">
+  <div class="tf-toolbar tf-wide">
+    <div class="tf-toolbar-row">
+      <span id="toolbar-title" class="tf-toolbar-title">（未选择项目）</span>
+      <div class="tf-toolbar-actions">
+        <input type="file" id="upload-input" multiple hidden>
+        <button class="btn btn-indigo" id="btn-upload">上传图片</button>
+        <span id="upload-status" class="tf-muted tf-hint" hidden></span>
+        <button class="btn btn-primary" id="btn-batch">开始批量标注</button>
+        <button class="btn btn-teal" id="btn-trial">试生成 1 张</button>
+        <progress id="main-progress" class="tf-progress" max="1" value="0" hidden style="width:180px"></progress>
+      </div>
+    </div>
+    <div id="api-banner" class="tf-banner" hidden>
+      ⚠️ 尚未配置可用的 API（需 Base URL / 模型名；Ollama 之外还需 API Key）。配置后点「测试连接」验证可用后再批量标注。
+    </div>
+  </div>
+
+  <div id="meta-bar" class="tf-meta-bar tf-wide"></div>
+  {% include "partials/batch_card.html" %}
+  <div id="grid" class="tf-grid tf-wide"></div>
+  <div id="grid-footer" class="tf-wide"></div>
+</div>

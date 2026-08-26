@@ -1,0 +1,13 @@
+<div class="tf-form">
+  <label class="tf-label">触发词前缀</label>
+  <input id="tag-prefix" class="tf-input" type="text" value="{{ settings.tag_prefix }}">
+  <label class="tf-label">前缀模式</label>
+  <div class="tf-radio-group">
+    <label><input type="radio" name="prefix-mode" value="prepend" {{ 'checked' if settings.prefix_mode == 'prepend' else '' }}> 整体前置</label>
+    <label><input type="radio" name="prefix-mode" value="per_tag" {{ 'checked' if settings.prefix_mode == 'per_tag' else '' }}> 每个 tag 加前缀</label>
+  </div>
+  <label class="tf-label">并发数</label>
+  <input id="concurrency" class="tf-input" type="number" min="1" max="32" step="1" value="{{ settings.concurrency }}">
+  <hr class="tf-sep">
+  <button class="btn btn-teal btn-block" id="btn-export">打包导出</button>
+</div>

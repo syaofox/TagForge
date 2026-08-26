@@ -1,0 +1,17 @@
+<div id="batch-card" class="tf-batch-card tf-wide" hidden>
+  <div class="tf-batch-head">
+    <span class="tf-batch-title">批量标注</span>
+    <span id="batch-status" class="tf-batch-status">处理中…</span>
+    <button class="btn btn-icon" id="btn-collapse-batch" title="收起（后台继续，进度见顶栏）">✕</button>
+  </div>
+  <progress id="batch-progress" class="tf-progress" max="1" value="0"></progress>
+  <div id="batch-stats" class="tf-muted tf-batch-stats"></div>
+  <div class="tf-batch-actions">
+    <button class="btn btn-danger" id="btn-batch-stop">终止</button>
+    <button class="btn btn-ghost" id="btn-log-toggle">日志</button>
+    <button class="btn btn-ghost" id="btn-log-clear">清空</button>
+    <button class="btn btn-ghost" id="btn-log-copy">复制</button>
+    <button class="btn btn-amber" id="btn-retry-failed" hidden>重试失败</button>
+  </div>
+  <div id="batch-log" class="tf-log" hidden></div>
+</div>
