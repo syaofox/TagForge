@@ -213,6 +213,7 @@ DEFAULT_SETTINGS = {
     "concurrency": 5,
     "last_project": "",
     "prompt_preset": "en_short_default",
+    "preset_keys": {},  # 模型预设 -> API Key（明文，仅存于 gitignore 的 settings.json）
 }
 
 # 模型预设（名称 -> Base URL / 默认模型）。Claude 需中转站、DeepSeek-VL 需自建端点、Ollama 需 /v1。
@@ -915,13 +916,31 @@ def set_setting(key: str, value) -> None:
 
 
 def on_preset_change(e: events.ValueChangeEventArguments) -> None:
-    preset = MODEL_PRESETS.get(e.value)
+    """切换模型预设：回填 Base URL / 模型名，并应用该预设记住的 API Key。"""
+    name = e.value
+    preset = MODEL_PRESETS.get(name)
     if not preset:
         return
     UI["base_url_input"].value = preset["base_url"]
     UI["model_input"].value = preset["model"]
     set_setting("base_url", preset["base_url"])
     set_setting("model", preset["model"])
+    saved_key = (state.settings.get("preset_keys") or {}).get(name, "")
+    if saved_key:
+        UI["api_key_input"].value = saved_key
+        set_setting("api_key", saved_key)
+    else:
+        ui.notify("该预设未保存 API Key，可手动填写（会自动记住到该预设）", type="info", timeout=3000)
+
+
+def on_api_key_change(e: events.ValueChangeEventArguments) -> None:
+    """保存 API Key，并把当前输入的 Key 记住到当前选中的模型预设（切换预设时自动回填）。"""
+    key = e.value or ""
+    set_setting("api_key", key)
+    sel = UI.get("model_preset_select")
+    if sel is not None and sel.value in MODEL_PRESETS and key.strip():
+        state.settings.setdefault("preset_keys", {})[sel.value] = key
+        save_settings()
 
 
 def set_prompt_text(value: str) -> None:
@@ -1108,7 +1127,8 @@ def build_ui() -> None:
         ui.separator()
         ui.label("模型配置").classes("tf-section")
         with ui.column().classes("w-full gap-1"):
-            ui.select(list(MODEL_PRESETS.keys()), label="模型预设", on_change=on_preset_change) \
+            UI["model_preset_select"] = ui.select(list(MODEL_PRESETS.keys()),
+                                                       label="模型预设", on_change=on_preset_change) \
                 .props("outlined dense").classes("w-full")
             UI["base_url_input"] = ui.input(label="Base URL",
                                             value=state.settings.get("base_url")) \
@@ -1119,7 +1139,7 @@ def build_ui() -> None:
                 .on_value_change(lambda e: set_setting("model", e.value))
             UI["api_key_input"] = ui.input(label="API Key", value=state.settings.get("api_key")) \
                 .props("outlined dense type=password").classes("w-full") \
-                .on_value_change(lambda e: set_setting("api_key", e.value))
+                .on_value_change(on_api_key_change)
             with ui.row().classes("w-full items-center gap-2"):
                 UI["test_btn"] = ui.button("测试连接", icon="wifi_tethering",
                                            on_click=test_api) \
