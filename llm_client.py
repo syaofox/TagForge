@@ -21,6 +21,13 @@ class FatalAPIError(RuntimeError):
     """不可重试的致命错误（如 API Key 无效 / 无权限 / 多次重试仍失败），用于中止整批任务。"""
 
 
+DEFAULT_SYSTEM_PROMPT = (
+    "You are an image captioning assistant. "
+    "Generate 5-10 comma-separated tags (danbooru style, lowercase) for the image. "
+    "Output only the tags."
+)
+
+
 class LLMClient:
     """OpenAI 兼容视觉模型客户端：支持重试、请求超时、Token 累计统计。"""
 
@@ -36,23 +43,6 @@ class LLMClient:
         )
         self.total_prompt_tokens = 0
         self.total_completion_tokens = 0
-
-    @staticmethod
-    def build_system_prompt(mode: str, custom_prompt: str | None = None) -> str:
-        """根据打标模式拼装 system prompt；未自定义时使用内建默认。"""
-        if custom_prompt and custom_prompt.strip():
-            return custom_prompt.strip()
-        if mode == "natural":
-            return (
-                "You are an image captioning assistant. "
-                "Describe the image in one detailed natural-language sentence. "
-                "Output only the sentence."
-            )
-        return (
-            "You are an image captioning assistant. "
-            "Generate 5-10 comma-separated tags (danbooru-style, lowercase) for the image. "
-            "Output only the tags."
-        )
 
     @staticmethod
     def encode_image(image: Image.Image, max_side: int = 1280, quality: int = 80) -> str:
@@ -102,16 +92,15 @@ class LLMClient:
         except APIError as e:
             raise FatalAPIError(f"连接失败：{e}") from e
 
-    async def generate(self, image_base64: str, prompt: str, mode: str) -> str:
+    async def generate(self, image_base64: str, prompt: str) -> str:
         """调用视觉模型生成标签文本。
 
         :param image_base64: 预处理后的图片 data URL
-        :param prompt: 自定义 system prompt（可为空字符串，表示用内建默认）
-        :param mode: "short"（短标签）或 "natural"（自然语言）
+        :param prompt: system prompt（为空时使用内建默认）
         :raises FatalAPIError: Key 无效 / 无权限 / 多次重试后仍失败
         :return: 生成的标签文本（已 strip）
         """
-        system = self.build_system_prompt(mode, prompt)
+        system = prompt.strip() if prompt and prompt.strip() else DEFAULT_SYSTEM_PROMPT
         messages = [
             {"role": "system", "content": system},
             {

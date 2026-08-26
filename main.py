@@ -205,8 +205,7 @@ DEFAULT_SETTINGS = {
     "api_key": "",
     "base_url": "https://api.openai.com/v1",
     "model": "gpt-4o-mini",
-    "mode": "short",
-    "system_prompt": DEFAULT_PROMPTS["short"],
+    "system_prompt": DEFAULT_PROMPTS["short"]["en"],
     "tag_prefix": "",
     "prefix_mode": "prepend",
     "dark": False,
@@ -278,8 +277,7 @@ def load_settings() -> dict:
         return dict(DEFAULT_SETTINGS)
     merged = dict(DEFAULT_SETTINGS)
     merged.update({k: v for k, v in data.items() if k in DEFAULT_SETTINGS})
-    # 兼容旧配置：旧值（mode/character/clothing/style/custom）映射到新的「格式 × 目标」键；
-    # 兼容旧配置：
+    # 兼容旧配置（mode 字段已移除）：
     # - v1 键：mode / character / clothing / style / custom
     # - v2 键：short_default / natural_* 等（无语言前缀，按英文处理）
     # - 缺省：按提示词内容推断（=某格式英文默认 => en_<fmt>_default；否则 => custom）
@@ -289,17 +287,23 @@ def load_settings() -> dict:
         if old == "custom":
             merged["prompt_preset"] = "custom"
         elif old == "mode":
-            merged["prompt_preset"] = "en_" + merged.get("mode", "short") + "_default"
+            # 旧「随打标模式」：按提示词内容推断格式
+            sp = (merged.get("system_prompt") or "").strip()
+            merged["prompt_preset"] = (
+                "en_natural_default" if sp == DEFAULT_PROMPTS["natural"]["en"].strip()
+                else "en_short_default")
         else:  # character / clothing / style（旧版均为英文短标签风格）
             merged["prompt_preset"] = "en_short_" + old
     elif "prompt_preset" in data and not data["prompt_preset"].startswith(("en_", "zh_")):
         merged["prompt_preset"] = "en_" + data["prompt_preset"]
     elif "prompt_preset" not in data:
-        mode = merged.get("mode", "short")
         sp = (merged.get("system_prompt") or "").strip()
-        merged["prompt_preset"] = (
-            "en_" + mode + "_default"
-            if sp == DEFAULT_PROMPTS[mode]["en"].strip() else "custom")
+        if sp == DEFAULT_PROMPTS["natural"]["en"].strip():
+            merged["prompt_preset"] = "en_natural_default"
+        elif sp == DEFAULT_PROMPTS["short"]["en"].strip():
+            merged["prompt_preset"] = "en_short_default"
+        else:
+            merged["prompt_preset"] = "custom"
     return merged
 
 
@@ -350,13 +354,13 @@ def write_label(project: str, image_name: str, text: str) -> None:
     (d / f"{Path(image_name).stem}.txt").write_text(text, encoding="utf-8")
 
 
-def apply_prefix(text: str, prefix: str, mode: str) -> str:
+def apply_prefix(text: str, prefix: str, prefix_mode: str) -> str:
     """按 prefix_mode 对生成文本应用触发词前缀，并避免重复叠加。"""
     prefix = prefix.strip()
     if not prefix:
         return text
     pre = prefix.rstrip(",").strip()
-    if mode == "per_tag":
+    if prefix_mode == "per_tag":
         tags = [t.strip() for t in text.split(",") if t.strip()]
         return ", ".join(t if t.startswith(pre) else f"{pre}, {t}" for t in tags)
     if not text:
@@ -632,7 +636,7 @@ async def regenerate() -> None:
         data = "data:image/jpeg;base64," + base64.b64encode(
             await run.io_bound(encode_for_api, entry.path)).decode("ascii")
         tags = await state.client.generate(
-            data, state.settings.get("system_prompt", ""), state.settings.get("mode", "short"))
+            data, state.settings.get("system_prompt", ""))
         final = apply_prefix(tags, state.settings.get("tag_prefix", ""),
                              state.settings.get("prefix_mode", "prepend"))
         write_label(state.current, entry.name, final)
@@ -777,7 +781,6 @@ async def run_batch(targets: list) -> None:
     total = len(targets)
     done = 0
     prop = state.settings.get("system_prompt", "")
-    mode = state.settings.get("mode", "short")
     prefix = state.settings.get("tag_prefix", "")
     prefix_mode = state.settings.get("prefix_mode", "prepend")
 
@@ -793,7 +796,7 @@ async def run_batch(targets: list) -> None:
             try:
                 data = "data:image/jpeg;base64," + base64.b64encode(
                     await run.io_bound(encode_for_api, entry.path)).decode("ascii")
-                tags = await state.client.generate(data, prop, mode)
+                tags = await state.client.generate(data, prop)
                 final = apply_prefix(tags, prefix, prefix_mode)
                 write_label(state.current, entry.name, final)
                 set_badge(entry, "tagged")
@@ -977,7 +980,6 @@ def on_prompt_preset_change(e: events.ValueChangeEventArguments) -> None:
         text = DEFAULT_PROMPTS[fmt][lang]
     else:
         text = TRAINING_PROMPTS[target][fmt][lang]
-    state.settings["mode"] = fmt
     set_prompt_text(text)
     state.settings["system_prompt"] = text
     save_settings()
@@ -989,7 +991,6 @@ def restore_default_prompt() -> None:
     UI["prompt_select"].value = "en_short_default"
     set_prompt_text(DEFAULT_PROMPTS["short"]["en"])
     state.settings["system_prompt"] = DEFAULT_PROMPTS["short"]["en"]
-    state.settings["mode"] = "short"
     save_settings()
     ui.notify("已恢复为「英文 · 短标签 · 通用」默认提示词")
 
