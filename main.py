@@ -179,23 +179,27 @@ def apply_prefix(text: str, prefix: str, mode: str) -> str:
 
 # ---------------- 图片处理（供 run.cpu_bound 的进程池调用，须为模块级函数） ----------------
 def make_thumb(project: str, name: str, max_side: int = 360) -> str:
-    """生成（并缓存到 datasets/.cache/<项目>/ ）缩略图，返回 data URL。"""
-    src = images_dir(project) / name
-    cache_dir = DATASETS / ".cache" / project
-    cache = cache_dir / f"{Path(name).stem}.thumb.jpg"
-    if cache.is_file() and cache.stat().st_mtime >= src.stat().st_mtime:
-        data = cache.read_bytes()
-    else:
-        with Image.open(src) as im:
-            im.thumbnail((max_side, max_side))
-            if im.mode != "RGB":
-                im = im.convert("RGB")
-            buf = io.BytesIO()
-            im.save(buf, format="JPEG", quality=80)
-            data = buf.getvalue()
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        cache.write_bytes(data)
-    return "data:image/jpeg;base64," + base64.b64encode(data).decode("ascii")
+    """生成（并缓存到 datasets/.cache/<项目>/ ）缩略图，返回 data URL；失败返回空串。"""
+    try:
+        src = images_dir(project) / name
+        cache_dir = DATASETS / ".cache" / project
+        cache = cache_dir / f"{Path(name).stem}.thumb.jpg"
+        if (cache.is_file() and cache.stat().st_size > 0
+                and cache.stat().st_mtime >= src.stat().st_mtime):
+            data = cache.read_bytes()
+        else:
+            with Image.open(src) as im:
+                im.thumbnail((max_side, max_side))
+                if im.mode != "RGB":
+                    im = im.convert("RGB")
+                buf = io.BytesIO()
+                im.save(buf, format="JPEG", quality=80)
+                data = buf.getvalue()
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            cache.write_bytes(data)
+        return "data:image/jpeg;base64," + base64.b64encode(data).decode("ascii")
+    except Exception:
+        return ""
 
 
 def encode_for_api(path: Path) -> bytes:
@@ -299,12 +303,13 @@ async def refresh_grid() -> None:
         ImageEntry(name=p.name, path=p, status=read_status(state.current, p.name))
         for p in imgs
     ]
-    # 并行生成缩略图（进程池），避免阻塞事件循环
-    thumbs = await asyncio.gather(
-        *(run.io_bound(make_thumb, state.current, e.name) for e in entries)
+    # 并行生成缩略图（线程池），单张失败不影响整批
+    results = await asyncio.gather(
+        *(run.io_bound(make_thumb, state.current, e.name) for e in entries),
+        return_exceptions=True,
     )
-    for e, t in zip(entries, thumbs):
-        e.thumb = t
+    for e, r in zip(entries, results):
+        e.thumb = r if isinstance(r, str) else ""
     state.entries = entries
 
     with grid:
@@ -314,10 +319,12 @@ async def refresh_grid() -> None:
                 .mark("image-card") \
                 .on("click", lambda i=i: open_detail(i))
             with card:
-                with ui.element("div").classes("tf-card-inner relative"):
+                if entry.thumb:
                     ui.image(entry.thumb).classes("tf-card-img")
-                    entry.badge = ui.label(STATUS_TEXT[entry.status]).classes("tf-badge")
-                    entry.badge.style(f"background:{soft_color(STATUS_COLOR[entry.status])}; color:{STATUS_COLOR[entry.status]};")
+                else:
+                    ui.label("⚠️ 无法预览").classes("tf-card-img tf-img-err tf-muted")
+                entry.badge = ui.label(STATUS_TEXT[entry.status]).classes("tf-badge")
+                entry.badge.style(f"background:{soft_color(STATUS_COLOR[entry.status])}; color:{STATUS_COLOR[entry.status]};")
                 ui.label(entry.name).classes("tf-card-name")
 
 
@@ -726,11 +733,13 @@ body { font-family: "Inter", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei
   box-shadow: 0 1px 2px rgba(16, 24, 40, .06);
   padding: 0 !important;
   overflow: hidden;
+  position: relative;
   transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
   cursor: pointer;
 }
 .tf-card:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(16, 24, 40, .14); border-color: #c9cdf1 !important; }
 .tf-card-img { width: 100%; height: 150px; object-fit: cover; display: block; background: #e9ebf3; }
+.tf-img-err { display: flex; align-items: center; justify-content: center; font-size: .72rem; }
 .body--dark .tf-card-img { background: #20242f; }
 .tf-card-name { font-size: .78rem; font-weight: 600; color: var(--tf-text); padding: .5rem .7rem .55rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tf-badge {
