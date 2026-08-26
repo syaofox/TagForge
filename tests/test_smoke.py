@@ -23,14 +23,15 @@ def temp_project():
     from PIL import Image
     Image.new("RGB", (256, 256), (200, 30, 30)).save(img_dir / "demo.png")
     # 隔离全局状态（不依赖磁盘配置的残留 last_project）
-    original_last = main.state.settings.get("last_project") or ""
+    settings_file = main.SETTINGS_FILE
+    orig_bytes = settings_file.read_bytes() if settings_file.exists() else None
     main.state.current = None
     main.state.entries = []
     main.state.settings["last_project"] = "p1vis_never"  # 占位：测试中 auto-select 不会命中
     yield
-    # 恢复原 last_project，避免测试点击项目时 save_settings() 污染磁盘配置
-    main.state.settings["last_project"] = original_last
-    main.save_settings()
+    # 原样还原配置文件，避免测试期间的 save_settings() 污染磁盘
+    if orig_bytes is not None:
+        settings_file.write_bytes(orig_bytes)
     shutil.rmtree(DATASETS / PROJ, ignore_errors=True)
 
 

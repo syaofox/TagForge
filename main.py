@@ -54,12 +54,15 @@ DEFAULT_PROMPTS = {
         "en": (
             "You are an image captioning assistant. "
             "Describe the image in one detailed natural-language sentence. "
+            "Example (format only): 'A long-haired woman in a light dress stands under a "
+            "cherry blossom tree, smiling at the camera, soft afternoon light.' "
             "Output only the sentence."
         ),
         "zh": (
             "你是一名图像打标助手。请用一句完整、带标点的中文自然语言句子描述这张图片"
             "（客观、具体，包含主体、动作、环境与光线），禁止输出没有标点的关键词罗列。"
-            "只输出这句话。"
+            "参考成品示例（仅示意句式）：「一位长发少女站在樱花树下，身穿浅色连衣裙，"
+            "微笑望向镜头，背景虚化，阳光透过花瓣洒落。」只输出这句话。"
         ),
     },
 }
@@ -98,7 +101,10 @@ TRAINING_PROMPTS = {
                 "pose/action, expression, background/setting, lighting. OMIT identity features "
                 "fixed across the dataset (face, eye/hair color, skin, body type) so the trigger "
                 "absorbs them. Keep the same element order in every caption; plain factual "
-                "English, no poetic language and no quality words. Output only the caption."
+                "English, no poetic language and no quality words. "
+                "Example (format only): '<name>, a medium shot of a man in a dark police "
+                "uniform with a blue shirt, standing in a kitchen with hands on hips and a "
+                "stern expression, warm interior lighting.' Output only the caption."
             ),
             "zh": (
                 "你是角色 LoRA 训练数据集的打标助手。用中文输出一句通顺、完整的自然语言"
@@ -109,7 +115,9 @@ TRAINING_PROMPTS = {
                 "每张图保持相同句式与元素顺序，简明客观，20-45 字，不用修饰性语言和质量词。"
                 "句式参考（按此骨架组织，填入每张图的实际内容）："
                 "「<角色名>，一张<镜头>，身穿<服装细节>，<姿势动作>，<表情>，站在<背景场景>"
-                "，<光线>。」只输出这一句话，不要解释。"
+                "，<光线>。」参考成品示例（仅示意句式与标点）："
+                "「角色名，一张半身照，身穿蓝白女仆装，双手叉腰，微笑，站在白色影棚背景前，"
+                "柔光照明。」只输出这一句话，不要解释。"
             ),
         },
     },
@@ -142,14 +150,19 @@ TRAINING_PROMPTS = {
                 "specifically: garment type, color, material/fabric, fit and cut (sleeves, "
                 "collar, hem), visible details (buttons, zippers, folds), how it is worn, and "
                 "the view (front view, close-up, full body). Keep the wearer generic - never "
-                "describe the person's identity. Plain factual English. Output only the caption."
+                "describe the person's identity. Plain factual English. "
+                "Example (format only): 'She wears a long beige trench coat with a tie waist, "
+                "finely textured fabric and a crisp collar, front view, blurred background.' "
+                "Output only the caption."
             ),
             "zh": (
                 "你是服装 LoRA 训练数据集的打标助手。用中文输出一句通顺、带标点的自然语言"
                 "句子，禁止输出没有标点的关键词串。具体描述服装：种类、颜色、面料材质、"
                 "版型剪裁（袖子、领口、下摆）、可见细节（纽扣、拉链、褶皱）、穿着方式与"
                 "视角（正面、特写、全身）。穿着者保持泛化，不描述其身份。简明客观，"
-                "20-40 字。只输出这一句话。"
+                "20-40 字。参考成品示例（仅示意句式与标点）："
+                "「她身穿一件米色长款风衣，系带收腰，面料细腻有肌理，领口袖口细节清晰，"
+                "正面视角，背景虚化。」只输出这一句话。"
             ),
         },
     },
@@ -176,13 +189,18 @@ TRAINING_PROMPTS = {
                 "You are a captioning assistant for STYLE LoRA training datasets. "
                 "Write ONE natural-language caption describing the CONTENT of the image "
                 "(subjects, scene, composition), not the art style. Keep style words to 2-3 at "
-                "most. No quality terms. Plain factual English. Output only the caption."
+                "most. No quality terms. Plain factual English. "
+                "Example (format only): 'A thick-painted illustration of a girl at a street "
+                "corner, centered composition, warm tones, soft lighting.' "
+                "Output only the caption."
             ),
             "zh": (
                 "你是风格 LoRA 训练数据集的打标助手。用中文输出一句通顺、带标点的自然语言"
                 "句子，禁止输出没有标点的关键词串。描述画面的内容（主体、场景、构图），"
                 "而不是描述艺术风格；风格词最多 2-3 个；不要使用质量词。简明客观，"
-                "20-40 字。只输出这一句话。"
+                "20-40 字。参考成品示例（仅示意句式与标点）："
+                "「画面以厚涂插画风格呈现，主体是少女立于街角，居中构图，暖色调，光线柔和。」"
+                "只输出这一句话。"
             ),
         },
     },
