@@ -36,7 +36,7 @@ SETTINGS_FILE = CONFIG / "settings.json"
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 
-# 两种打标模式的默认 System Prompt（供文本框与「恢复默认」共用）
+# 通用默认提示词（短标签 / 自然语言）
 DEFAULT_PROMPTS = {
     "short": (
         "You are an image captioning assistant. "
@@ -50,49 +50,83 @@ DEFAULT_PROMPTS = {
     ),
 }
 
-# 训练场景预设提示词（依据 LoRA 数据集打标规范整理，见设计文档 11.3 与 reference.md）：
-# - 角色：省略身份特征（脸/瞳/发/体型，交给触发词吸收），保留服装/姿势/表情/镜头/背景/光线，元素顺序一致；
+# 训练场景预设提示词（角色 / 服装 / 风格 × 短标签 / 自然语言）
+# 依据 LoRA 数据集打标规范整理（见设计文档 11.3 与参考来源）：
+# - 角色：省略固定身份特征（脸/瞳/发/体型，交给触发词吸收），保留服装/姿势/表情/镜头/背景/光线，元素顺序一致；
 # - 服装：服装是主体，具体描述款式/颜色/面料/版型/细节/褶皱，穿者泛化；
 # - 风格：打「内容」不打「风格」，风格词至多 2-3 个稳定词，禁质量词。
 TRAINING_PROMPTS = {
-    "character": (
-        "You are a captioning assistant for CHARACTER LoRA training datasets. "
-        "Generate 5-12 comma-separated danbooru-style tags (lowercase, no underscores). "
-        "Rule: identity must be absorbed by the trigger token, so OMIT features that are "
-        "fixed across the dataset (face shape, eye/hair color, skin, body type). "
-        "INCLUDE: clothing and its details, pose/action, expression, shot type "
-        "(full_body, close-up, ...), background/setting, lighting, and media type "
-        "(1girl, solo, ...). Keep the element order consistent across every image; "
-        "consistency matters more than exhaustive detail. Output only the tags."
-    ),
-    "clothing": (
-        "You are a captioning assistant for CLOTHING LoRA training datasets. "
-        "Generate 5-12 comma-separated danbooru-style tags (lowercase, no underscores). "
-        "The garment is the subject: ALWAYS include garment type, color, material/fabric, "
-        "fit and cut (sleeve_length, collar, hem), visible details (buttons, zippers, "
-        "ribbons, embroidery), folds/texture when visible, and how it is worn "
-        "(zipped, tucked, ...). Keep the wearer generic - never describe the person's "
-        "identity. Add view tags when recognizable (front_view, side_view, back_view, "
-        "full_body, close-up, flat_lay). Order: garment, material/color, fit details, "
-        "wearer context, view. Output only the tags."
-    ),
-    "style": (
-        "You are a captioning assistant for STYLE / art-style LoRA training datasets. "
-        "Generate 5-12 comma-separated danbooru-style tags (lowercase, no underscores). "
-        "Rule: caption the CONTENT, not the style - describe subjects, scene and "
-        "composition so content never becomes bound to the style. Add at most 2-3 STABLE "
-        "style cues (e.g. lineart, cel_shading, watercolor, rough_sketch, thick_outlines, "
-        "grainy, muted_colors). Avoid generic quality tags (masterpiece, best_quality, 4k). "
-        "Output only the tags."
-    ),
+    "character": {
+        "short": (
+            "You are a captioning assistant for CHARACTER LoRA training datasets. "
+            "Generate 5-12 comma-separated danbooru-style tags (lowercase, no underscores). "
+            "Rule: identity must be absorbed by the trigger token, so OMIT features that are "
+            "fixed across the dataset (face shape, eye/hair color, skin, body type). "
+            "INCLUDE: clothing and its details, pose/action, expression, shot type "
+            "(full_body, close-up, ...), background/setting, lighting, and media type "
+            "(1girl, solo, ...). Keep the element order consistent across every image; "
+            "consistency matters more than exhaustive detail. Output only the tags."
+        ),
+        "natural": (
+            "You are a captioning assistant for CHARACTER LoRA training datasets. "
+            "Write ONE natural-language caption (15-35 words) with this fixed element order: "
+            "trigger token first, then media type, shot type of a man/woman, clothing, "
+            "pose/action, expression, background/setting, lighting. OMIT identity features "
+            "fixed across the dataset (face, eye/hair color, skin, body type) so the trigger "
+            "absorbs them. Keep the same element order in every caption; plain factual "
+            "English, no poetic language and no quality words. Output only the caption."
+        ),
+    },
+    "clothing": {
+        "short": (
+            "You are a captioning assistant for CLOTHING LoRA training datasets. "
+            "Generate 5-12 comma-separated danbooru-style tags (lowercase, no underscores). "
+            "The garment is the subject: ALWAYS include garment type, color, material/fabric, "
+            "fit and cut (sleeve_length, collar, hem), visible details (buttons, zippers, "
+            "ribbons, embroidery), folds/texture when visible, and how it is worn "
+            "(zipped, tucked, ...). Keep the wearer generic - never describe the person's "
+            "identity. Add view tags when recognizable (front_view, side_view, back_view, "
+            "full_body, close-up, flat_lay). Order: garment, material/color, fit details, "
+            "wearer context, view. Output only the tags."
+        ),
+        "natural": (
+            "You are a captioning assistant for CLOTHING LoRA training datasets. "
+            "Write ONE natural-language caption (10-25 words) describing the garment "
+            "specifically: garment type, color, material/fabric, fit and cut (sleeves, "
+            "collar, hem), visible details (buttons, zippers, folds), how it is worn, and "
+            "the view (front view, close-up, full body). Keep the wearer generic - never "
+            "describe the person's identity. Plain factual English. Output only the caption."
+        ),
+    },
+    "style": {
+        "short": (
+            "You are a captioning assistant for STYLE / art-style LoRA training datasets. "
+            "Generate 5-12 comma-separated danbooru-style tags (lowercase, no underscores). "
+            "Rule: caption the CONTENT, not the style - describe subjects, scene and "
+            "composition so content never becomes bound to the style. Add at most 2-3 STABLE "
+            "style cues (e.g. lineart, cel_shading, watercolor, rough_sketch, thick_outlines, "
+            "grainy, muted_colors). Avoid generic quality tags (masterpiece, best_quality, 4k). "
+            "Output only the tags."
+        ),
+        "natural": (
+            "You are a captioning assistant for STYLE LoRA training datasets. "
+            "Write ONE natural-language caption describing the CONTENT of the image "
+            "(subjects, scene, composition), not the art style. Keep style words to 2-3 at "
+            "most. No quality terms. Plain factual English. Output only the caption."
+        ),
+    },
 }
 
-# 提示词下拉选项：value -> 显示名
+# 提示词预设下拉：value -> 显示名（格式 × 训练目标，取代原「打标模式」单选）
 PROMPT_PRESETS = {
-    "mode": "随打标模式（短标签/自然语言）",
-    "character": "角色 LoRA 训练",
-    "clothing": "服装 LoRA 训练",
-    "style": "风格 LoRA 训练",
+    "short_default": "短标签 · 通用",
+    "natural_default": "自然语言 · 通用",
+    "short_character": "短标签 · 角色 LoRA",
+    "natural_character": "自然语言 · 角色 LoRA",
+    "short_clothing": "短标签 · 服装 LoRA",
+    "natural_clothing": "自然语言 · 服装 LoRA",
+    "short_style": "短标签 · 风格 LoRA",
+    "natural_style": "自然语言 · 风格 LoRA",
     "custom": "自定义",
 }
 
@@ -107,7 +141,7 @@ DEFAULT_SETTINGS = {
     "dark": False,
     "concurrency": 5,
     "last_project": "",
-    "prompt_preset": "mode",
+    "prompt_preset": "short_default",
 }
 
 # 模型预设（名称 -> Base URL / 默认模型）。Claude 需中转站、DeepSeek-VL 需自建端点、Ollama 需 /v1。
@@ -171,12 +205,22 @@ def load_settings() -> dict:
         return dict(DEFAULT_SETTINGS)
     merged = dict(DEFAULT_SETTINGS)
     merged.update({k: v for k, v in data.items() if k in DEFAULT_SETTINGS})
-    # 兼容旧配置：缺少 prompt_preset 时按提示词内容推断（=模式默认 => 随模式；否则 => 自定义，保留用户体验）
-    if "prompt_preset" not in data:
+    # 兼容旧配置：旧值（mode/character/clothing/style/custom）映射到新的「格式 × 目标」键；
+    # 缺省时按提示词内容推断（=某格式默认 => 对应 _default；否则 => custom）。
+    _old_map = {"mode", "character", "clothing", "style", "custom"}
+    if "prompt_preset" in data and data["prompt_preset"] in _old_map:
+        old = data["prompt_preset"]
+        if old == "custom":
+            merged["prompt_preset"] = "custom"
+        elif old == "mode":
+            merged["prompt_preset"] = merged.get("mode", "short") + "_default"
+        else:  # character / clothing / style（旧版均为短标签风格）
+            merged["prompt_preset"] = "short_" + old
+    elif "prompt_preset" not in data:
         mode = merged.get("mode", "short")
         sp = (merged.get("system_prompt") or "").strip()
         merged["prompt_preset"] = (
-            "mode" if sp == DEFAULT_PROMPTS.get(mode, "").strip() else "custom")
+            mode + "_default" if sp == DEFAULT_PROMPTS.get(mode, "").strip() else "custom")
     return merged
 
 
@@ -760,40 +804,38 @@ def on_prompt_text_change(e: events.ValueChangeEventArguments) -> None:
 
 
 def on_prompt_preset_change(e: events.ValueChangeEventArguments) -> None:
-    """选择提示词预设：自动填充对应提示词；「自定义」保留现有文本。"""
+    """选择提示词预设：按「格式 × 训练目标」填充对应提示词；「自定义」保留现有文本。
+
+    预设键形如 <格式>_<目标>，例如 short_character / natural_style。
+    """
     preset = e.value
     state.settings["prompt_preset"] = preset
-    if preset == "mode":
-        default = DEFAULT_PROMPTS.get(state.settings.get("mode", "short"), DEFAULT_PROMPTS["short"])
-        set_prompt_text(default)
-        state.settings["system_prompt"] = default
-    elif preset in TRAINING_PROMPTS:
-        text = TRAINING_PROMPTS[preset]
-        set_prompt_text(text)
-        state.settings["system_prompt"] = text
+    if preset == "custom":
+        save_settings()
+        return
+    fmt, target = preset.split("_", 1)
+    if target == "default":
+        text = DEFAULT_PROMPTS[fmt]
+    else:
+        text = TRAINING_PROMPTS[target][fmt]
+    state.settings["mode"] = fmt
+    set_prompt_text(text)
+    state.settings["system_prompt"] = text
     save_settings()
 
 
 def restore_default_prompt() -> None:
-    """恢复为「随打标模式」并填入该模式默认提示词。"""
-    state.settings["prompt_preset"] = "mode"
-    UI["prompt_select"].value = "mode"
-    default = DEFAULT_PROMPTS.get(state.settings.get("mode", "short"), DEFAULT_PROMPTS["short"])
-    set_prompt_text(default)
-    state.settings["system_prompt"] = default
+    """恢复为「短标签 · 通用」并填入对应默认提示词。"""
+    state.settings["prompt_preset"] = "short_default"
+    UI["prompt_select"].value = "short_default"
+    set_prompt_text(DEFAULT_PROMPTS["short"])
+    state.settings["system_prompt"] = DEFAULT_PROMPTS["short"]
+    state.settings["mode"] = "short"
     save_settings()
-    ui.notify("已恢复为「随打标模式」默认提示词")
+    ui.notify("已恢复为「短标签 · 通用」默认提示词")
 
 
-def on_mode_change(e: events.ValueChangeEventArguments) -> None:
-    """切换打标模式：仅当预设为「随打标模式」时，同步提示词为新模式默认。"""
-    new_mode = e.value
-    if state.settings.get("prompt_preset") == "mode":
-        default = DEFAULT_PROMPTS.get(new_mode, DEFAULT_PROMPTS["short"])
-        set_prompt_text(default)
-        state.settings["system_prompt"] = default
-        save_settings()
-    set_setting("mode", new_mode)
+
 
 
 # ---------------- 界面构建 ----------------
@@ -940,11 +982,7 @@ def build_ui() -> None:
                 .on_value_change(lambda e: set_setting("api_key", e.value))
 
             ui.separator()
-            ui.label("打标模式").classes("tf-label")
-            ui.radio({"short": "短标签（逗号分隔）", "natural": "自然语言描述"},
-                     value=state.settings.get("mode"), on_change=on_mode_change) \
-                .props("dense")
-            ui.label("System Prompt 预设").classes("tf-label")
+            ui.label("提示词预设（格式 × 训练目标）").classes("tf-label")
             UI["prompt_select"] = ui.select(PROMPT_PRESETS, label="选择预设",
                                             value=state.settings.get("prompt_preset"),
                                             on_change=on_prompt_preset_change) \
