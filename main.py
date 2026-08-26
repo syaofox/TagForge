@@ -247,7 +247,9 @@ class ImageEntry:
     status: str = "pending"
     thumb: str = ""
     preview: str = ""  # 详情面板用的大图 data URL（懒加载，非缩略图）
+    label: str = ""  # 标签文本（卡片缩略图下方展示）
     badge: Optional[ui.element] = None
+    caption: Optional[ui.element] = None  # 卡片上的标注文字元素
 
 
 @dataclass
@@ -481,6 +483,15 @@ def soft_color(hex_color: str, alpha: float = 0.14) -> str:
     return f"rgba({r},{g},{b},{alpha})"
 
 
+def update_card_caption(entry: ImageEntry) -> None:
+    """刷新卡片缩略图下方的标注文字（空则隐藏）。"""
+    if entry.caption is None:
+        return
+    text = read_label(state.current, entry.name).strip()
+    entry.caption.set_text(text)
+    entry.caption.set_visibility(bool(text))
+
+
 def set_badge(entry: ImageEntry, status: str) -> None:
     entry.status = status
     if entry.badge is not None:
@@ -530,7 +541,8 @@ async def refresh_grid() -> None:
 
     imgs = project_images(state.current)
     entries = [
-        ImageEntry(name=p.name, path=p, status=read_status(state.current, p.name))
+        ImageEntry(name=p.name, path=p, status=read_status(state.current, p.name),
+                   label=read_label(state.current, p.name))
         for p in imgs
     ]
     # 并行生成缩略图（线程池），单张失败不影响整批
@@ -555,6 +567,9 @@ async def refresh_grid() -> None:
                     ui.label("⚠️ 无法预览").classes("tf-card-img tf-img-err tf-muted")
                 entry.badge = ui.label(STATUS_TEXT[entry.status]).classes("tf-badge")
                 entry.badge.style(f"background:{soft_color(STATUS_COLOR[entry.status])}; color:{STATUS_COLOR[entry.status]};")
+                entry.caption = ui.label(entry.label).classes("tf-card-caption")
+                if not entry.label.strip():
+                    entry.caption.set_visibility(False)  # 未标注不占位
                 ui.label(entry.name).classes("tf-card-name")
 
 
@@ -606,6 +621,7 @@ def save_tag() -> None:
     text = state.tagbox.value or ""
     write_label(state.current, entry.name, text)
     set_badge(entry, "tagged" if text.strip() else "pending")
+    update_card_caption(entry)
     ui.notify("已保存")
 
 
@@ -644,6 +660,7 @@ async def regenerate() -> None:
         if state.tagbox is not None:
             state.tagbox.set_value(final)
         set_badge(entry, "tagged")
+        update_card_caption(entry)
         update_tokens()
         ui.notify("重新生成完成")
     except FatalAPIError as e:
@@ -801,6 +818,7 @@ async def run_batch(targets: list) -> None:
                 final = apply_prefix(tags, prefix, prefix_mode)
                 write_label(state.current, entry.name, final)
                 set_badge(entry, "tagged")
+                update_card_caption(entry)
                 add_log(f"{entry.name} ✅ 成功 ({time.perf_counter() - t0:.1f}s)")
             except FatalAPIError as e:
                 set_badge(entry, "failed")
@@ -1091,7 +1109,13 @@ body { font-family: "Inter", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei
 .tf-card-img { width: 100%; height: 150px; object-fit: cover; display: block; background: #e9ebf3; }
 .tf-img-err { display: flex; align-items: center; justify-content: center; font-size: .72rem; }
 .body--dark .tf-card-img { background: #20242f; }
-.tf-card-name { font-size: .78rem; font-weight: 600; color: var(--tf-text); padding: .5rem .7rem .55rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tf-card-caption {
+  font-size: .72rem; line-height: 1.45; color: var(--tf-muted);
+  padding: .45rem .7rem 0;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+  overflow: hidden; word-break: break-all;
+}
+.tf-card-name { font-size: .78rem; font-weight: 600; color: var(--tf-text); padding: .35rem .7rem .55rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tf-badge {
   position: absolute; top: 8px; right: 8px;
   font-size: .66rem; font-weight: 600; padding: 3px 9px;
