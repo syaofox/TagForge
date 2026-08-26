@@ -1,0 +1,8 @@
+<div id="project-list" class="tf-project-list" hx-swap-oob="outerHTML">
+  {% for name in projects %}
+    <button type="button" class="btn tf-project-item {{ 'active' if name == current else '' }}"
+            data-project="{{ name }}">{{ name }}</button>
+  {% else %}
+    <div class="tf-empty">暂无项目</div>
+  {% endfor %}
+</div>

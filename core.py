@@ -496,6 +496,13 @@ def filtered_entries() -> list:
     return items
 
 
+def scan_entries(project: str) -> list:
+    """扫描项目图片，返回 ImageEntry 列表（不预生成缩略图 data URL）。"""
+    return [ImageEntry(name=p.name, path=p, status=read_status(project, p.name),
+                       label=read_label(project, p.name))
+            for p in project_images(project)]
+
+
 # ---------------- 提示词（预设 + 角色名注入） ----------------
 # 角色 LoRA 预设键（注入角色名用）
 CHARACTER_PRESETS = {

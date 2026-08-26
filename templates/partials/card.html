@@ -1,0 +1,10 @@
+<div class="tf-card" data-name="{{ entry.name }}"
+     hx-get="/partials/detail?project={{ uq(project) }}&name={{ uq(entry.name) }}"
+     hx-target="#detail-drawer" hx-swap="innerHTML"
+     {% if entry.status == 'tagged' %}style="border-color: {{ status_color.tagged }}a8"{% elif entry.status == 'failed' %}style="border-color: {{ status_color.failed }}99"{% endif %}>
+  {% if entry.status == 'tagged' %}<span class="tf-check">✓</span>{% endif %}
+  <img class="tf-card-img" loading="lazy" src="/api/image/thumb/{{ uq(project) }}/{{ uq(entry.name) }}" alt="{{ entry.name }}">
+  <span class="tf-badge" style="background: {{ status_color[entry.status] }}1f; color: {{ status_color[entry.status] }}">{{ status_text[entry.status] }}</span>
+  {% if entry.label %}<div class="tf-card-caption">{{ entry.label }}</div>{% endif %}
+  <div class="tf-card-name" title="{{ entry.name }}">{{ entry.name }}</div>
+</div>

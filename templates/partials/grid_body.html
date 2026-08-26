@@ -1,0 +1,9 @@
+{% if not current %}
+  <div class="tf-empty">😶 请先在左侧选择或新建一个项目。</div>
+{% elif not entries %}
+  <div class="tf-empty">📭 该项目还没有图片，点击顶栏「上传图片」开始。</div>
+{% elif items | length == 0 %}
+  <div class="tf-empty">🔍 没有匹配的图片（试试清空筛选或搜索）。</div>
+{% else %}
+  {% for entry in shown %}{% include "partials/card.html" %}{% endfor %}
+{% endif %}

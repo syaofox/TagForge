@@ -1,0 +1,21 @@
+<div id="meta-bar" class="tf-meta-bar tf-wide" hx-swap-oob="innerHTML">
+  <span class="tf-chip">{{ stats_line }}</span>
+  <div class="tf-filter-toggle">
+    <button class="{{ 'active' if filter == 'all' else '' }}"
+            hx-get="/partials/grid_cards?filter=all" hx-include="#search-input"
+            hx-target="#grid" hx-swap="innerHTML">全部</button>
+    <button class="{{ 'active' if filter == 'tagged' else '' }}"
+            hx-get="/partials/grid_cards?filter=tagged" hx-include="#search-input"
+            hx-target="#grid" hx-swap="innerHTML">🟢 已标注</button>
+    <button class="{{ 'active' if filter == 'pending' else '' }}"
+            hx-get="/partials/grid_cards?filter=pending" hx-include="#search-input"
+            hx-target="#grid" hx-swap="innerHTML">🟡 待标注</button>
+    <button class="{{ 'active' if filter == 'failed' else '' }}"
+            hx-get="/partials/grid_cards?filter=failed" hx-include="#search-input"
+            hx-target="#grid" hx-swap="innerHTML">🔴 失败</button>
+  </div>
+  <input id="search-input" name="q" class="tf-input tf-search" value="{{ q }}"
+         placeholder="🔍 搜索文件名或标签…"
+         hx-get="/partials/grid_cards" hx-trigger="input changed delay:300ms"
+         hx-include="this" hx-target="#grid" hx-swap="innerHTML">
+</div>

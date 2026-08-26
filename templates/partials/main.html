@@ -1,7 +1,7 @@
 <div class="tf-main-wrap">
   <div class="tf-toolbar tf-wide">
     <div class="tf-toolbar-row">
-      <span id="toolbar-title" class="tf-toolbar-title">（未选择项目）</span>
+      <span id="toolbar-title" class="tf-toolbar-title">{{ current or '（未选择项目）' }}</span>
       <div class="tf-toolbar-actions">
         <input type="file" id="upload-input" multiple hidden>
         <button class="btn btn-indigo" id="btn-upload">上传图片</button>
@@ -18,6 +18,7 @@
 
   <div id="meta-bar" class="tf-meta-bar tf-wide"></div>
   {% include "partials/batch_card.html" %}
-  <div id="grid" class="tf-grid tf-wide"></div>
+  <div id="grid" class="tf-grid tf-wide"
+    {% if current %} hx-get="/partials/grid_cards" hx-trigger="load" hx-swap="innerHTML" {% endif %}></div>
   <div id="grid-footer" class="tf-wide"></div>
 </div>

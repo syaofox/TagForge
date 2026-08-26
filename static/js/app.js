@@ -51,4 +51,56 @@
     clearTimeout(input._t);
     input._t = setTimeout(() => TF.saveSetting(key, input.value), delay || 600);
   };
+
+  // ---------- HX-Trigger 事件总线 ----------
+  document.addEventListener("toast", (e) => {
+    const d = e.detail || {};
+    if (d.msg) TF.toast(d.msg, d.type || "info");
+  });
+
+  // ---------- Dialog 通用 ----------
+  function openDialog(id) {
+    const d = document.getElementById(id);
+    if (d && !d.open) d.showModal();
+  }
+  $("[data-close]").forEach((b) => b.addEventListener("click", () => b.closest("dialog").close()));
+
+  // 通用确认框（Promise）
+  TF.confirm = function (text) {
+    return new Promise((resolve) => {
+      const dlg = $("#dlg-confirm");
+      if (!dlg) return resolve(false);
+      let done = false;
+      const finish = (v) => { if (done) return; done = true; dlg.close(); resolve(v); };
+      const ok = $("#btn-confirm-ok");
+      ok.onclick = () => finish(true);
+      dlg.oncancel = () => finish(false);
+      dlg.onclose = () => finish(false);
+      $("#confirm-text").textContent = text;
+      if (!dlg.open) dlg.showModal();
+    });
+  };
+
+  // ---------- 项目 ----------
+  const gridSwap = { target: "#grid", swap: "innerHTML" };
+  $("#btn-new-project")?.addEventListener("click", () => openDialog("dlg-new-project"));
+  $("#btn-confirm-new-project")?.addEventListener("click", async () => {
+    const name = $("#new-project-name").value.trim();
+    if (!name) { TF.toast("项目名不能为空", "negative"); return; }
+    $("#dlg-new-project").close();
+    await htmx.ajax("POST", "/api/projects", Object.assign({ values: { name } }, gridSwap));
+    $("#new-project-name").value = "";
+  });
+  document.addEventListener("click", (e) => {
+    const t = e.target.closest("[data-project]");
+    if (t) htmx.ajax("POST", "/api/projects/" + encodeURIComponent(t.dataset.project) + "/select", gridSwap);
+  });
+  $("#btn-delete-project")?.addEventListener("click", async () => {
+    const cur = document.getElementById("toolbar-title")?.textContent;
+    if (!cur || cur === "（未选择项目）") { TF.toast("请先选择项目", "warning"); return; }
+    if (await TF.confirm("确定删除整个项目「" + cur + "」吗？该操作不可恢复。")) {
+      htmx.ajax("DELETE", "/api/projects/" + encodeURIComponent(cur), gridSwap);
+    }
+  });
+
 })();

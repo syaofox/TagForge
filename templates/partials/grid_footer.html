@@ -1,0 +1,9 @@
+<div id="grid-footer" class="tf-wide" hx-swap-oob="innerHTML">
+  {% if remain > 0 %}
+  <div class="tf-load-more-wrap">
+    <button class="btn"
+            hx-get="/partials/grid_cards?filter={{ filter }}&q={{ q | urlencode }}&page={{ view_page + 1 }}"
+            hx-target="#grid" hx-swap="innerHTML">加载更多（还有 {{ remain }} 张）</button>
+  </div>
+  {% endif %}
+</div>
