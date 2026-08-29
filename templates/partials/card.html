@@ -1,10 +1,9 @@
-<div class="tf-card" data-name="{{ entry.name }}"
+<div class="tf-card tf-card--{{ entry.status }}" data-name="{{ entry.name }}"
      hx-get="/partials/detail?project={{ uq(project) }}&name={{ uq(entry.name) }}"
-     hx-target="#detail-drawer" hx-swap="innerHTML"
-     {% if entry.status == 'tagged' %}style="border-color: {{ status_color.tagged }}a8"{% elif entry.status == 'failed' %}style="border-color: {{ status_color.failed }}99"{% endif %}>
+     hx-target="#detail-drawer" hx-swap="innerHTML">
   {% if entry.status == 'tagged' %}<span class="tf-check"><svg class="tf-icon" aria-hidden="true"><use href="/static/icons.svg#icon-check"/></svg></span>{% endif %}
   <img class="tf-card-img" loading="lazy" src="/api/image/thumb/{{ uq(project) }}/{{ uq(entry.name) }}" alt="{{ entry.name }}">
-  <span class="tf-badge" style="background: {{ status_color[entry.status] }}14; color: {{ status_color[entry.status] }}"><svg class="tf-icon" aria-hidden="true">{% if entry.status == 'tagged' %}<use href="/static/icons.svg#icon-check-circle"/>{% elif entry.status == 'pending' %}<use href="/static/icons.svg#icon-clock"/>{% elif entry.status == 'failed' %}<use href="/static/icons.svg#icon-x-circle"/>{% else %}<use href="/static/icons.svg#icon-loader"/>{% endif %}</svg> {{ status_text[entry.status] }}</span>
+  <span class="tf-badge tf-badge--{{ entry.status }}"><svg class="tf-icon" aria-hidden="true">{% if entry.status == 'tagged' %}<use href="/static/icons.svg#icon-check-circle"/>{% elif entry.status == 'pending' %}<use href="/static/icons.svg#icon-clock"/>{% elif entry.status == 'failed' %}<use href="/static/icons.svg#icon-x-circle"/>{% else %}<use href="/static/icons.svg#icon-loader"/>{% endif %}</svg> {{ status_text[entry.status] }}</span>
   {% if entry.label %}<div class="tf-card-caption">{{ entry.label }}</div>{% endif %}
   <div class="tf-card-name" title="{{ entry.name }}">{{ entry.name }}</div>
 </div>

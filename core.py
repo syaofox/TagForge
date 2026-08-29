@@ -281,9 +281,9 @@ STATUS_TEXT = {
     "failed": "失败",
 }
 STATUS_COLOR = {
-    "tagged": "#15946a",
-    "pending": "#b45309",
-    "processing": "#3aa0b0",
+    "tagged": "#0f7a56",
+    "pending": "#8a5f0a",
+    "processing": "#257a8a",
     "failed": "#c03a3a",
 }
 
