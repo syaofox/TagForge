@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="TagForge">
+  <rect width="32" height="32" rx="7" fill="#3aa0b0"/>
+  <g transform="translate(4 4)" stroke="#ffffff" stroke-width="1.75" fill="none" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M9 3.5L3.5 9v6L9 20.5h6L20.5 15V9L15 3.5H9Z"/>
+    <path d="M8.5 9.5h.01"/>
+    <path d="M13.5 13.5L10 10M12 7.5l2 2-4 4-2-2 4-4Z"/>
+  </g>
+</svg>
