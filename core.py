@@ -29,6 +29,7 @@ ROOT = Path(__file__).resolve().parent
 DATASETS = ROOT / "datasets"
 CONFIG = ROOT / "config"
 SETTINGS_FILE = CONFIG / "settings.json"
+PRESETS_FILE = CONFIG / "presets.json"  # 用户自定义模型预设（独立于 settings.json）
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 PAGE_SIZE = 60  # 网格每页加载张数（P0-3 分页）
@@ -266,8 +267,9 @@ DEFAULT_SETTINGS = {
     "preset_keys": {},  # 模型预设 -> API Key（明文，仅存于 gitignore 的 settings.json）
 }
 
-# 模型预设（名称 -> Base URL / 默认模型）。Claude 需中转站、DeepSeek-VL 需自建端点、Ollama 需 /v1。
-MODEL_PRESETS = {
+# 内置模型预设（名称 -> Base URL / 默认模型）。Claude 需中转站、DeepSeek-VL 需自建端点、Ollama 需 /v1。
+# 用户可以覆盖（同名写入自定义）或删除（移入删除标记）；「统一」处理：见 get_effective_presets。
+DEFAULT_MODEL_PRESETS = {
     "OpenCode (Zen/Go)": {"base_url": "https://opencode.ai/zen/go/v1", "model": "deepseek-v4-flash-vision-exp"},
     "DeepSeek (官方)": {"base_url": "https://api.deepseek.com", "model": "deepseek-v4-flash-vision-exp"},
     "OpenAI (GPT-4o)": {"base_url": "https://api.openai.com/v1", "model": "gpt-4o-mini"},
@@ -360,6 +362,128 @@ def save_settings() -> None:
     CONFIG.mkdir(parents=True, exist_ok=True)
     SETTINGS_FILE.write_text(
         json.dumps(state.settings, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+# ---------------- 模型预设（自定义持久化，独立文件） ----------------
+# 内置预设（DEFAULT_MODEL_PRESETS）与用户预设「统一」处理：新增/覆盖/删除/改名对所有预设生效。
+# 持久化到 config/presets.json（gitignore）：
+#   {"custom_presets": {name: {base_url, model}}, "removed_presets": [被删除的内置预设名]}
+_presets: dict = {"custom_presets": {}, "removed_presets": []}
+_presets_loaded = False
+
+
+def _ensure_presets() -> None:
+    """确保预设缓存已从磁盘加载（lifespan 或首次访问时调用）。"""
+    global _presets_loaded
+    if not _presets_loaded:
+        load_presets()
+
+
+def load_presets() -> dict:
+    """从 config/presets.json 加载自定义预设与删除标记；损坏/缺失时回退空。"""
+    global _presets, _presets_loaded
+    data = {"custom_presets": {}, "removed_presets": []}
+    if PRESETS_FILE.is_file():
+        try:
+            loaded = json.loads(PRESETS_FILE.read_text(encoding="utf-8"))
+            custom = loaded.get("custom_presets")
+            if isinstance(custom, dict):
+                data["custom_presets"] = {
+                    str(k): {
+                        "base_url": str((v or {}).get("base_url", "")),
+                        "model": str((v or {}).get("model", "")),
+                    }
+                    for k, v in custom.items()
+                }
+            removed = loaded.get("removed_presets")
+            if isinstance(removed, list):
+                data["removed_presets"] = [str(x) for x in removed if x]
+        except Exception:
+            pass  # 文件损坏 -> 空预设
+    _presets = data
+    _presets_loaded = True
+    return data
+
+
+def save_presets() -> None:
+    CONFIG.mkdir(parents=True, exist_ok=True)
+    PRESETS_FILE.write_text(
+        json.dumps(_presets, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def get_effective_presets() -> dict:
+    """生效的模型预设 = 内置（剔除已删除）+ 自定义覆盖（同名覆盖内置）。"""
+    _ensure_presets()
+    eff = dict(DEFAULT_MODEL_PRESETS)
+    for name in _presets.get("removed_presets", []):
+        eff.pop(name, None)
+    eff.update(_presets.get("custom_presets", {}))
+    return eff
+
+
+def validate_preset_name(name: str) -> Optional[str]:
+    """预设名校验：非空、≤50 字符。返回错误信息或 None。"""
+    name = (name or "").strip()
+    if not name:
+        return "预设名不能为空"
+    if len(name) > 50:
+        return "预设名过长（≤50 字符）"
+    return None
+
+
+def upsert_preset(name: str, base_url: str, model: str,
+                  orig_name: Optional[str] = None) -> Optional[str]:
+    """新增 / 覆盖 / 改名模型预设（内置与自定义统一处理）。
+
+    :param orig_name: 非空且与原预设不同时视为「改名」：移除原预设
+        （若为自定义，内置则保留原样）并把其已记忆的 API Key 迁移到新名。
+    :return: 错误信息或 None
+    """
+    name = (name or "").strip()
+    err = validate_preset_name(name)
+    if err:
+        return err
+    _ensure_presets()
+    custom = _presets.setdefault("custom_presets", {})
+    removed = _presets.setdefault("removed_presets", [])
+    if orig_name and orig_name != name:
+        if orig_name in custom:
+            custom.pop(orig_name, None)
+        if orig_name in removed:
+            removed.remove(orig_name)
+        keys = state.settings.get("preset_keys") or {}
+        if orig_name in keys:
+            keys[name] = keys.pop(orig_name)
+            save_settings()
+    custom[name] = {
+        "base_url": (base_url or "").strip().rstrip("/"),
+        "model": (model or "").strip(),
+    }
+    if name in removed:
+        removed.remove(name)
+    save_presets()
+    return None
+
+
+def delete_preset(name: str) -> None:
+    """删除模型预设（内置/自定义统一）：自定义直接移除；被自定义覆盖的内置只移除覆盖
+    （回到默认）；纯内置移入删除标记。一并清理该预设记忆的 API Key。"""
+    name = (name or "").strip()
+    _ensure_presets()
+    custom = _presets.get("custom_presets", {})
+    removed = _presets.setdefault("removed_presets", [])
+    if name in DEFAULT_MODEL_PRESETS and name not in custom:
+        if name not in removed:
+            removed.append(name)
+    else:
+        custom.pop(name, None)
+        if name in removed:
+            removed.remove(name)
+    keys = state.settings.get("preset_keys") or {}
+    if name in keys:
+        del keys[name]
+        save_settings()
+    save_presets()
 
 
 # ---------------- 文件扫描 / 状态判定 ----------------

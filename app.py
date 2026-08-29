@@ -26,6 +26,7 @@ templates = Jinja2Templates(directory=str(ROOT / "templates"))
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     core.state.settings = core.load_settings()
+    core.load_presets()
     if not core.SETTINGS_FILE.exists():
         core.save_settings()
     projects = core.scan_projects()
@@ -94,7 +95,7 @@ def _ctx(**kw) -> dict:
         "current": core.state.current,
         "project": core.state.current,  # 模板中图片 URL 等用（card.html 的 src/hx-get）
         "entries": core.state.entries,
-        "model_presets": core.MODEL_PRESETS,
+        "model_presets": core.get_effective_presets(),
         "prompt_presets": core.PROMPT_PRESETS,
         "status_text": core.STATUS_TEXT,
         "status_color": core.STATUS_COLOR,
@@ -485,14 +486,64 @@ async def save_setting(request: Request) -> Response:
     return Response(status_code=204)
 
 
-@app.get("/api/settings/preset/{name}")
-async def preset_info(name: str) -> JSONResponse:
-    preset = core.MODEL_PRESETS.get(name)
+@app.get("/api/settings/preset")
+async def preset_info(request: Request) -> JSONResponse:
+    # 预设名经 query 传递：名称可含 `/` 等字符，放路径段会被 %2F 拆断（如「DeepSeek-VL（自建/中转）」）
+    name = request.query_params.get("name") or ""
+    preset = core.get_effective_presets().get(name)
     if not preset:
         return JSONResponse({"error": "未知预设"}, status_code=404)
     saved_key = (core.state.settings.get("preset_keys") or {}).get(name, "")
     return JSONResponse({"name": name, "base_url": preset["base_url"],
                          "model": preset["model"], "api_key": saved_key})
+
+
+# ---------------- 模型预设管理（自定义持久化 + 内置统一处理） ----------------
+@app.get("/api/settings/presets")
+async def presets_list() -> JSONResponse:
+    return JSONResponse({"presets": core.get_effective_presets()})
+
+
+@app.post("/api/settings/presets")
+async def presets_save(request: Request) -> JSONResponse:
+    body = await request.json()
+    body = body or {}
+    err = core.upsert_preset(
+        str(body.get("name") or ""),
+        str(body.get("base_url") or ""),
+        str(body.get("model") or ""),
+        str(body.get("orig_name") or "") or None,
+    )
+    if err:
+        return JSONResponse({"error": err}, status_code=400)
+    return JSONResponse({"ok": True, "presets": core.get_effective_presets()})
+
+
+@app.delete("/api/settings/presets")
+async def presets_delete(request: Request) -> JSONResponse:
+    # 预设名经 query 传递：名称可含 `/`，放路径段会被 %2F 拆断（如「DeepSeek-VL（自建/中转）」）
+    name = request.query_params.get("name") or ""
+    core.delete_preset(name)
+    return JSONResponse({"ok": True, "presets": core.get_effective_presets()})
+
+
+# ---------------- 模型列表（从提供商拉取） ----------------
+@app.post("/api/models")
+async def models(request: Request) -> JSONResponse:
+    body = await request.json()
+    body = body or {}
+    base = (str(body.get("base_url") or "")).strip()
+    key = (str(body.get("api_key") or "")).strip()
+    if not base:
+        return JSONResponse({"error": "请先填写 Base URL"}, status_code=400)
+    client = LLMClient(api_key=key, base_url=base,
+                       model_name=core.state.settings.get("model", ""))
+    try:
+        models_list = await client.list_models()
+    except FatalAPIError as e:
+        status = 401 if ("无权限" in str(e) or "401" in str(e)) else 500
+        return JSONResponse({"error": str(e)}, status_code=status)
+    return JSONResponse({"models": models_list})
 
 
 @app.post("/api/settings/prompt")

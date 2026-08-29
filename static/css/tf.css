@@ -59,6 +59,8 @@ body { font-family: "Inter", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei
 .tf-hint { font-size: .72rem; }
 .tf-sep { border: none; border-top: 1px solid var(--tf-border); margin: 8px 0; }
 .tf-radio-group { display: flex; gap: 14px; font-size: .82rem; align-items: center; }
+.tf-preset-row { display: flex; gap: 6px; align-items: center; }
+.tf-preset-row .tf-select, .tf-preset-row .tf-input { flex: 1; }
 
 /* 按钮 */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 14px; border: 1px solid transparent;

@@ -380,10 +380,10 @@
   });
   $$('input[name="prefix-mode"]').forEach((r) => r.addEventListener("change", () => TF.saveSetting("prefix_mode", r.value)));
 
-  // 模型预设：回填 Base URL / 模型 / 该预设记忆的 Key
+  // 模型预设：回填 Base URL / 模型 / 该预设记忆的 Key，并从提供商拉取模型列表
   $("#model-preset")?.addEventListener("change", async () => {
     const name = $("#model-preset").value;
-    const resp = await fetch("/api/settings/preset/" + encodeURIComponent(name));
+    const resp = await fetch("/api/settings/preset?name=" + encodeURIComponent(name));
     if (!resp.ok) return;
     const j = await resp.json();
     $("#base-url").value = j.base_url;
@@ -393,6 +393,117 @@
     await TF.saveSetting("model", j.model);
     if (j.api_key) await TF.saveSetting("api_key", j.api_key);
     else TF.toast("该预设未保存 API Key，可手动填写（会自动记住到该预设）", "info", 3500);
+    fetchModels(j.base_url, $("#api-key").value, false);
+  });
+
+  // ---------- 模型列表（从提供商拉取，不缓存） ----------
+  async function fetchModels(baseUrl, apiKey, silent) {
+    const btn = $("#btn-refresh-models");
+    if (btn) { btn.disabled = true; btn.textContent = "…"; }
+    try {
+      const r = await fetch("/api/models", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ base_url: baseUrl || "", api_key: apiKey || "" })
+      });
+      const j = await r.json();
+      const dl = $("#model-list");
+      if (dl) {
+        dl.innerHTML = "";
+        (j.models || []).forEach((m) => {
+          const op = document.createElement("option");
+          op.value = m;
+          dl.appendChild(op);
+        });
+      }
+      if (r.ok) {
+        if (!silent) {
+          if (j.models && j.models.length) TF.toast("已从提供商获取 " + j.models.length + " 个模型", "positive", 2500);
+          else TF.toast("该提供商未提供模型列表，可手动输入模型名", "info", 4000);
+        }
+      } else {
+        TF.toast(j.error || "获取模型列表失败", "negative", 5000);
+      }
+    } catch (_) {
+      if (!silent) TF.toast("获取模型列表失败", "negative");
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = "⟳"; }
+    }
+  }
+  $("#btn-refresh-models")?.addEventListener("click", () => fetchModels($("#base-url").value, $("#api-key").value, false));
+  $("#base-url")?.addEventListener("change", () => fetchModels($("#base-url").value, $("#api-key").value, false));
+  if ($("#base-url") && $("#base-url").value) fetchModels($("#base-url").value, $("#api-key").value, true);
+
+  // ---------- 模型预设管理（新增 / 编辑 / 删除，内置与自定义统一） ----------
+  async function reloadPresets(selectTo) {
+    const r = await fetch("/api/settings/presets");
+    if (!r.ok) return;
+    const j = await r.json();
+    const sel = $("#model-preset");
+    if (!sel) return;
+    const cur = selectTo || sel.value;
+    sel.innerHTML = "";
+    Object.keys(j.presets || {}).forEach((name) => {
+      const op = document.createElement("option");
+      op.value = name;
+      op.textContent = name;
+      sel.appendChild(op);
+    });
+    if (cur && j.presets[cur]) sel.value = cur;
+  }
+  async function openPresetDialog(mode) {
+    const dlg = $("#dlg-preset");
+    if (!dlg) return;
+    $("#preset-name").value = "";
+    $("#preset-base-url").value = "";
+    $("#preset-model").value = "";
+    if (mode === "edit") {
+      const name = $("#model-preset").value;
+      if (!name) { TF.toast("请先选择一个预设", "warning"); return; }
+      $("#dlg-preset-title").textContent = "编辑预设";
+      const r = await fetch("/api/settings/preset?name=" + encodeURIComponent(name));
+      if (!r.ok) { TF.toast("读取预设失败", "negative"); return; }
+      const j = await r.json();
+      $("#preset-name").value = j.name || name;
+      $("#preset-base-url").value = j.base_url || "";
+      $("#preset-model").value = j.model || "";
+    } else {
+      $("#dlg-preset-title").textContent = "新增模型预设";
+    }
+    if (!dlg.open) dlg.showModal();
+  }
+  $("#btn-add-preset")?.addEventListener("click", () => openPresetDialog("create"));
+  $("#btn-edit-preset")?.addEventListener("click", () => openPresetDialog("edit"));
+  $("#btn-del-preset")?.addEventListener("click", async () => {
+    const name = $("#model-preset").value;
+    if (!name) { TF.toast("请先选择一个预设", "warning"); return; }
+    if (!(await TF.confirm("确定删除预设「" + name + "」吗？其记忆的 API Key 也会一并清除。"))) return;
+    const r = await fetch("/api/settings/presets?name=" + encodeURIComponent(name), { method: "DELETE" });
+    const j = await r.json();
+    if (!r.ok) { TF.toast(j.error || "删除失败", "negative"); return; }
+    await reloadPresets("");
+    TF.toast("已删除预设「" + name + "」", "positive");
+  });
+  $("#btn-save-preset")?.addEventListener("click", async () => {
+    const name = $("#preset-name").value.trim();
+    if (!name) { TF.toast("预设名不能为空", "negative"); return; }
+    const editing = $("#dlg-preset-title").textContent === "编辑预设";
+    const orig = editing ? $("#model-preset").value : "";
+    const r = await fetch("/api/settings/presets", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, base_url: $("#preset-base-url").value, model: $("#preset-model").value, orig_name: orig })
+    });
+    const j = await r.json();
+    if (!r.ok) { TF.toast(j.error || "保存失败", "negative"); return; }
+    $("#dlg-preset").close();
+    // 应用该预设到当前配置
+    $("#base-url").value = $("#preset-base-url").value;
+    $("#model-name").value = $("#preset-model").value;
+    await TF.saveSetting("base_url", $("#base-url").value);
+    await TF.saveSetting("model", $("#model-name").value);
+    await reloadPresets(name);
+    $("#model-preset").value = name;
+    fetchModels($("#base-url").value, $("#api-key").value, true);
+    TF.toast(editing ? "已保存预设「" + name + "」" : "已新增预设「" + name + "」", "positive");
   });
   // API Key 变更：记住到当前预设（若属于内置预设）
   $("#api-key")?.addEventListener("change", async () => {

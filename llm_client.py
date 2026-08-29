@@ -92,6 +92,26 @@ class LLMClient:
         except APIError as e:
             raise FatalAPIError(f"连接失败：{e}") from e
 
+    async def list_models(self) -> list:
+        """获取提供商当前可用的模型列表（不依赖 model 名）。
+
+        部分网关不支持 GET /models（404）时返回空列表，调用方可回退手动输入。
+        :raises FatalAPIError: Key 无效 / 无权限 / 网络或服务错误
+        """
+        try:
+            data = await self.client.models.list()
+        except APIStatusError as e:
+            if e.status_code in (401, 403):
+                raise FatalAPIError(f"API Key 无效或无权限（HTTP {e.status_code}）") from e
+            if e.status_code == 404:
+                return []  # 网关不支持模型列表
+            raise FatalAPIError(f"获取模型列表失败 HTTP {e.status_code}：{e.message}") from e
+        except APIError as e:
+            raise FatalAPIError(f"获取模型列表失败：{e}") from e
+        except OSError as e:
+            raise FatalAPIError(f"连接失败：{e}") from e
+        return sorted({m.id for m in data.data})
+
     async def generate(self, image_base64: str, prompt: str) -> str:
         """调用视觉模型生成标签文本。
 

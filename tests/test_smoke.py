@@ -1,11 +1,13 @@
 """应用级冒烟测试：FastAPI + HTMX（替代原 NiceGUI UI 冒烟）。
 
 覆盖：首页渲染、项目创建/选择/删除、上传、网格（缩略图/筛选）、标签保存、
-图片删除、批量前置校验、导出。
+图片删除、批量前置校验、导出、模型预设管理、模型列表拉取。
 """
+import asyncio
 import io
 import zipfile
 from pathlib import Path
+from urllib.parse import quote
 
 from PIL import Image
 
@@ -104,3 +106,113 @@ def test_upload_sanitizes_path_traversal():
     assert dst2 == core.images_dir("pytest_tmp") / "x.png"
     dst3, _ = core.resolve_upload_destination("pytest_tmp", "..\\y.png")
     assert dst3 == core.images_dir("pytest_tmp") / "y.png"
+
+
+def test_preset_crud(client):
+    """自定义预设：新增 / 查询 / preset_info 回填 / 删除（含持久化文件）。"""
+    r = client.post("/api/settings/presets", json={
+        "name": "My Provider", "base_url": "https://myx/v1/", "model": "vision-x"})
+    assert r.status_code == 200
+    eff = client.get("/api/settings/presets").json()["presets"]
+    assert eff["My Provider"] == {"base_url": "https://myx/v1", "model": "vision-x"}
+    assert core.PRESETS_FILE.is_file()
+    # preset_info 对自定义预设生效（含已记忆的 Key）
+    client.post("/api/settings", json={"preset_keys": {"My Provider": "sk-mine"}})
+    j = client.get("/api/settings/preset?name=" + quote("My Provider")).json()
+    assert j["base_url"] == "https://myx/v1" and j["model"] == "vision-x" and j["api_key"] == "sk-mine"
+    # 空名校验
+    r = client.post("/api/settings/presets", json={"name": "", "base_url": "", "model": ""})
+    assert r.status_code == 400
+    # 删除自定义预设 -> 一并清理 preset_keys
+    r = client.delete("/api/settings/presets?name=" + quote("My Provider"))
+    assert r.status_code == 200
+    assert "My Provider" not in client.get("/api/settings/presets").json()["presets"]
+    assert "My Provider" not in core.state.settings["preset_keys"]
+
+
+def test_preset_overrides_and_deletes_builtin(client):
+    """统一处理：内置预设可覆盖（同名写入自定义）；纯内置可删除（移入 removed 标记）。"""
+    name = "Ollama（本地）"
+    r = client.post("/api/settings/presets", json={
+        "name": name, "base_url": "http://127.0.0.1:11434/v1", "model": "my-llava"})
+    assert r.status_code == 200
+    assert client.get("/api/settings/presets").json()["presets"][name]["model"] == "my-llava"
+    # 删除被覆盖的内置 -> 仅移除覆盖，回到默认
+    client.delete("/api/settings/presets?name=" + quote(name))
+    assert client.get("/api/settings/presets").json()["presets"][name]["model"] == "llava"
+    # 删除纯内置 -> 从生效列表消失，且不误删其它
+    client.delete("/api/settings/presets?name=" + quote(name))
+    eff = client.get("/api/settings/presets").json()["presets"]
+    assert name not in eff and "OpenAI (GPT-4o)" in eff
+
+
+def test_preset_delete_with_slash_in_name(client):
+    """回归：预设名含 `/`（如「DeepSeek-VL（自建/中转）」）时，名称须走 query 而非路径段。"""
+    name = "DeepSeek-VL（自建/中转）"
+    # 选中该预设时的 preset_info 回填
+    j = client.get("/api/settings/preset?name=" + quote(name, safe="")).json()
+    assert j["name"] == name and j["base_url"] == ""
+    # 删除内置
+    r = client.delete("/api/settings/presets?name=" + quote(name, safe=""))
+    assert r.status_code == 200
+    assert name not in client.get("/api/settings/presets").json()["presets"]
+    # 同名自定义覆盖后删除 -> 回到默认
+    client.post("/api/settings/presets", json={"name": name, "base_url": "http://x/v1", "model": "m"})
+    client.delete("/api/settings/presets?name=" + quote(name, safe=""))
+    assert client.get("/api/settings/presets").json()["presets"][name]["model"] == "deepseek-vl2"
+
+
+def test_preset_rename_migrates_key(client):
+    """改名：自定义预设被移除，preset_keys 迁移到新名。"""
+    client.post("/api/settings/presets", json={
+        "name": "Old", "base_url": "https://x/v1", "model": "m1"})
+    client.post("/api/settings", json={"preset_keys": {"Old": "sk-old"}})
+    r = client.post("/api/settings/presets", json={
+        "orig_name": "Old", "name": "New", "base_url": "https://x/v1", "model": "m2"})
+    assert r.status_code == 200
+    eff = client.get("/api/settings/presets").json()["presets"]
+    assert "Old" not in eff and eff["New"]["model"] == "m2"
+    keys = core.state.settings["preset_keys"]
+    assert "Old" not in keys and keys["New"] == "sk-old"
+
+
+def test_models_endpoint(client, monkeypatch):
+    """POST /api/models：按 base_url/api_key 返回提供商模型列表；缺 Base URL 返回 400。"""
+    class FakeClient:
+        def __init__(self, api_key="", base_url="", model_name=""):
+            self.api_key, self.base_url, self.model_name = api_key, base_url, model_name
+        async def list_models(self):
+            return ["m1", "m2"]
+
+    r = client.post("/api/models", json={"base_url": "", "api_key": ""})
+    assert r.status_code == 400
+
+    monkeypatch.setattr("app.LLMClient", FakeClient)
+    r = client.post("/api/models", json={"base_url": "https://x/v1", "api_key": "sk-x"})
+    assert r.status_code == 200
+    assert r.json() == {"models": ["m1", "m2"]}
+
+
+def test_llm_client_list_models():
+    """llm_client.list_models：去重排序；网关 404（不支持列表）返回空。"""
+    from httpx import Request, Response
+    from openai import APIStatusError
+
+    from llm_client import LLMClient
+
+    client = LLMClient(api_key="sk-x", base_url="http://localhost/v1", model_name="m")
+
+    class _Model:
+        def __init__(self, id): self.id = id
+    class _Resp:
+        data = [_Model("b"), _Model("a"), _Model("a")]
+
+    async def fake_ok():
+        return _Resp
+    client.client.models.list = fake_ok
+    assert asyncio.run(client.list_models()) == ["a", "b"]
+
+    def _notfound():
+        raise APIStatusError("Not Found", response=Response(404, request=Request("GET", "http://x/models")), body=None)
+    client.client.models.list = _notfound
+    assert asyncio.run(client.list_models()) == []

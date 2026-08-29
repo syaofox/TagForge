@@ -19,6 +19,22 @@
   </div>
 </dialog>
 
+<dialog id="dlg-preset" class="tf-dialog">
+  <div class="tf-dialog-card">
+    <h3 class="tf-dialog-title" id="dlg-preset-title">新增模型预设</h3>
+    <label class="tf-label">预设名</label>
+    <input id="preset-name" class="tf-input" type="text" placeholder="如 我的中转站">
+    <label class="tf-label">Base URL</label>
+    <input id="preset-base-url" class="tf-input" type="text" placeholder="https://…/v1">
+    <label class="tf-label">模型名</label>
+    <input id="preset-model" class="tf-input" type="text" placeholder="模型名（可稍后填写或从提供商拉取）">
+    <div class="tf-dialog-actions">
+      <button class="btn btn-ghost" data-close>取消</button>
+      <button class="btn btn-primary" id="btn-save-preset">保存</button>
+    </div>
+  </div>
+</dialog>
+
 <dialog id="dlg-help" class="tf-dialog">
   <div class="tf-dialog-card">
     <h3 class="tf-dialog-title">TagForge — LoRA 数据集图片打标工具</h3>
