@@ -24,15 +24,16 @@ def _protect_settings():
 
 @pytest.fixture(autouse=True)
 def protect_presets():
-    """每用例前后还原预设状态：presets.json / settings.json 磁盘文件与内存态
-    （core._presets 缓存、core.state.settings），避免预设 CRUD 测试相互污染。"""
+    """每用例隔离预设状态：备份用户的 presets.json / settings.json，以「空预设」基线启动，
+    用后还原。避免测试依赖磁盘残留状态（用户真实预设、此前测试/脚本写入的 removed 标记等）。"""
     orig_presets_file = core.PRESETS_FILE.read_text(encoding="utf-8") if core.PRESETS_FILE.exists() else None
     orig_settings_file = SETTINGS_FILE.read_bytes() if SETTINGS_FILE.exists() else None
-    core.load_presets()  # 归一化内存缓存与磁盘一致后再快照，避免 fixture 与 lifespan 顺序导致快照漂移
-    orig_presets = copy.deepcopy(core._presets)
+    # 基线：空自定义 + 空删除标记，确保每个用例从确定状态开始
+    core.PRESETS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    core.PRESETS_FILE.write_text('{"custom_presets": {}, "removed_presets": []}', encoding="utf-8")
+    core.load_presets()
     orig_settings = copy.deepcopy(core.state.settings)
     yield
-    core._presets = orig_presets
     core._presets_loaded = False  # 下次访问强制重读磁盘（已被还原）
     core.state.settings = orig_settings
     if orig_presets_file is not None:
