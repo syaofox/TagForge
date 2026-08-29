@@ -1,6 +1,6 @@
-"""core.py —— TagForge 纯业务逻辑层（0 框架依赖，可被 NiceGUI / FastAPI 共用）。
+"""core.py —— TagForge 纯业务逻辑层（0 框架依赖，可单测）。
 
-从原 main.py 抽出的所有非 UI 逻辑：
+所有非 UI 逻辑：
   - 常量与路径、提示词预设数据
   - 配置读写、文件扫描与状态判定
   - 图片处理（缩略图缓存 / API 预处理）
@@ -295,14 +295,7 @@ class ImageEntry:
     name: str
     path: Path
     status: str = "pending"
-    thumb: str = ""  # 缩略图 data URL（旧 UI 用；新 UI 走 /api/image/thumb 静态直连）
-    preview: str = ""  # 详情面板用的大图 data URL（旧 UI 懒加载用）
     label: str = ""  # 标签文本（卡片缩略图下方展示）
-    # --- 旧 UI（NiceGUI）元素引用：迁移完成前保留；新 UI（FastAPI）不使用 ---
-    badge: Optional[Any] = None
-    caption: Optional[Any] = None
-    card: Optional[Any] = None
-    check: Optional[Any] = None
 
 
 @dataclass
@@ -314,18 +307,9 @@ class AppState:
     client: Optional[LLMClient] = None
     batch: Optional[Any] = None
     abort_batch: bool = False
-    index: int = 0
-    tagbox: Optional[Any] = None  # 旧 UI 用
-    suppress_prompt_sync: bool = False  # 程序性更新提示词时抑制「视为自定义」
     view_filter: str = "all"  # 状态筛选：all/tagged/pending/failed
     view_query: str = ""  # 搜索词（文件名或标签）
     view_page: int = 1  # 已加载的分页数（每页 PAGE_SIZE）
-    search_seq: int = 0  # 搜索防抖序号（旧 UI 用）
-    upload_ok: int = 0  # 本轮上传成功张数
-    upload_fail: int = 0  # 本轮上传失败张数
-    upload_renamed: int = 0  # 本轮同名自动改名张数
-    batch_log_lines: list = field(default_factory=list)  # 批量日志（供复制）
-    batch_log_visible: bool = True  # 批量日志区展开/收起
     batch_queue: Optional[Any] = None  # 批量进度 SSE 桥（app.py 创建）
 
 

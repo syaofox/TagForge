@@ -1,7 +1,7 @@
 """llm_client.py —— OpenAI 兼容大模型 API 的异步封装。
 
 仅封装 OpenAI 兼容接口（DeepSeek、Ollama、中转站等均适用）。
-兼容性边界（见设计文档第五/十一节）：
+兼容性边界（见 doc/设计.md §九）：
   - Claude（Anthropic 官方 API）非 OpenAI 兼容，须经中转站暴露为 OpenAI 兼容端点；
   - DeepSeek-VL 为开源模型，须自建 vLLM/SGLang 提供 `.../v1` 端点；
   - Ollama 的 OpenAI 兼容端口为 `http://<host>:11434/v1`。

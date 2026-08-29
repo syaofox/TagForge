@@ -1,6 +1,6 @@
 /* TagForge 前端脚本
- * Step2 骨架：主题 / Tab / Toast / 通用设置保存
- * Step4+ 扩展：上传拖拽、详情抽屉、lightbox、快捷键、批量 SSE
+ * 骨架：主题 / Tab / Toast / 通用设置保存
+ * 交互：上传拖拽、详情抽屉、lightbox、快捷键、批量 SSE
  */
 (function () {
   "use strict";
