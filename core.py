@@ -65,7 +65,8 @@ DEFAULT_PROMPTS = {
 
 # 训练场景预设提示词（训练目标 × 格式 × 输出语言）
 # 依据 LoRA 数据集打标规范整理（见设计文档 11.3 与参考来源）：
-# - 角色：省略固定身份特征（脸/瞳/发/体型，交给触发词吸收），保留服装/姿势/表情/镜头/背景/光线，元素顺序一致；
+# - 角色：省略固定身份特征（脸/瞳/发/体型，交给触发词吸收），保留服装/姿势/表情/镜头距离与角度/背景/光线，元素顺序一致；
+#   可见的临时性特征（液体、湿发、泪水等）只要出现必须打标，防止被固化为角色特征（头发干湿尤其如此）；
 # - 服装：服装是主体，具体描述款式/颜色/面料/版型/细节/褶皱，穿者泛化；
 # - 风格：打「内容」不打「风格」，风格词至多 2-3 个稳定词，禁质量词。
 TRAINING_PROMPTS = {
@@ -76,16 +77,29 @@ TRAINING_PROMPTS = {
                 "Generate 5-12 comma-separated danbooru-style tags (lowercase, no underscores). "
                 "Rule: identity must be absorbed by the trigger token, so OMIT features that are "
                 "fixed across the dataset (face shape, eye/hair color, skin, body type). "
-                "INCLUDE: clothing and its details, pose/action, expression, shot type "
-                "(full_body, close-up, ...), background/setting, lighting, and media type "
-                "(1girl, solo, ...). Keep the element order consistent across every image; "
+                "INCLUDE: clothing and its details, pose/action, expression, shot distance "
+                "(full_body, cowboy_shot, upper_body, close-up, ...) and camera angle "
+                "(eye_level, from_above, from_below, from_behind, ...), background/setting, "
+                "lighting, and media type (1girl, solo, ...). "
+                "ALWAYS tag transient scene-conditional features when visible: liquids "
+                "(sweat, water_drops, wet_clothes, rain, oil, blood, ...) and other temporary "
+                "states (tears, blush, dirt, bandages, ...). Hair wetness MUST be tagged as "
+                "wet_hair - hair is identity, so untagged wetness gets baked into the "
+                "character. These are NOT identity; tagging them keeps them separate from "
+                "the trigger. "
+                "Keep the element order consistent across every image; "
                 "consistency matters more than exhaustive detail. Output only the tags."
             ),
             "zh": (
                 "你是角色 LoRA 训练数据集的打标助手。请生成 5-12 个以中文逗号分隔的关键词标签"
                 "。规则：身份特征要交给触发词吸收，因此省略数据集中固定的特征（脸型、瞳色、"
-                "发色、肤色、体型）；必须包含：服装及细节、姿势/动作、表情、镜头类型（全身、"
-                "特写等）、背景/场景、光线、媒介类型（单人、1girl 等）。每张图的标签顺序"
+                "发色、肤色、体型）；必须包含：服装及细节、姿势/动作、表情、镜头距离（全身、"
+                "半身、特写等）与拍摄角度（平视、仰视、俯视、背面等）、背景/场景、光线、"
+                "媒介类型（单人、1girl 等）。只要可见就必须打标的临时性特征：液体（汗珠、"
+                "水珠、雨水、油、血迹等）及其它随场景变化的状态（泪水、脸红、泥污、绷带等）；"
+                "头发干湿变化必须打「湿发」——头发属于身份特征，不打标会被固化成角色的"
+                "永久特征。这些是临时状态、不属于角色身份，显式打标才能与触发词分离。"
+                "每张图的标签顺序"
                 "保持一致，一致性比详尽更重要。只输出标签。"
             ),
         },
@@ -93,27 +107,41 @@ TRAINING_PROMPTS = {
             "en": (
                 "You are a captioning assistant for CHARACTER LoRA training datasets. "
                 "Write ONE natural-language caption (15-35 words) with this fixed element order: "
-                "trigger token first, then media type, shot type of a man/woman, clothing, "
-                "pose/action, expression, background/setting, lighting. OMIT identity features "
+                "trigger token first, then media type, shot distance and camera angle of a "
+                "man/woman, clothing, pose/action, expression, visible transient states "
+                "(liquids, wet hair - only when present), background/setting, lighting. "
+                "OMIT identity features "
                 "fixed across the dataset (face, eye/hair color, skin, body type) so the trigger "
-                "absorbs them. Keep the same element order in every caption; plain factual "
+                "absorbs them. ALWAYS mention transient scene-conditional features when "
+                "visible: liquids (sweat, water drops, rain, oil, blood, ...) and other "
+                "temporary states (tears, blush, dirt, bandages, ...). Wet hair MUST be "
+                "stated explicitly - hair is identity, so untagged wetness gets baked into "
+                "the character. These are NOT identity; describing them keeps them separate "
+                "from the trigger. Keep the same element order in every caption; plain factual "
                 "English, no poetic language and no quality words. "
-                "Example (format only): '<name>, a medium shot of a man in a dark police "
-                "uniform with a blue shirt, standing in a kitchen with hands on hips and a "
-                "stern expression, warm interior lighting.' Output only the caption."
+                "Example (format only): '<name>, a low-angle medium shot of a man in a dark "
+                "police uniform with a blue shirt, standing in a kitchen with hands on hips "
+                "and a stern expression, beads of sweat on his forehead, warm interior "
+                "lighting.' Output only the caption."
             ),
             "zh": (
                 "你是角色 LoRA 训练数据集的打标助手。用中文输出一句通顺、完整的自然语言"
                 "描述句，要求：必须是一句带标点的全句话（逗号、句号齐备），按中文语法连接"
                 "，禁止输出关键词列表或没有标点的标签串；句子以角色名（触发词）开头，随后"
-                "按固定顺序组织：媒介/镜头、服装细节、姿势动作、表情、背景场景、光线；省略"
+                "按固定顺序组织：媒介、镜头距离与角度（如 低角度半身照）、服装细节、姿势"
+                "动作、表情、临时状态（液体、湿发等，仅可见时提及）、背景场景、光线；省略"
                 "数据集中固定的身份特征（脸型、瞳色、发色、肤色、体型），让触发词吸收；"
+                "身上可见的临时状态必须写明：液体（汗珠、水珠、雨水、油、血迹等）及其它"
+                "随场景变化的状态（泪水、脸红、泥污、绷带等）；头发干湿变化必须写「湿发」"
+                "——头发属于身份特征，不写会被固化成角色的永久特征。这些是临时状态、"
+                "不属于角色身份，写出来才能与触发词分离。"
                 "每张图保持相同句式与元素顺序，简明客观，20-45 字，不用修饰性语言和质量词。"
                 "句式参考（按此骨架组织，填入每张图的实际内容）："
-                "「<角色名>，一张<镜头>，身穿<服装细节>，<姿势动作>，<表情>，站在<背景场景>"
-                "，<光线>。」参考成品示例（仅示意句式与标点）："
-                "「角色名，一张半身照，身穿蓝白女仆装，双手叉腰，微笑，站在白色影棚背景前，"
-                "柔光照明。」只输出这一句话，不要解释。"
+                "「<角色名>，一张<镜头距离与角度>，身穿<服装细节>，<姿势动作>，<表情>，"
+                "<临时状态，仅可见时>，站在<背景场景>，<光线>。」参考成品示例（仅示意句式"
+                "与标点）："
+                "「角色名，一张低角度半身照，身穿蓝白女仆装，双手叉腰，微笑，额角挂着汗珠，"
+                "站在白色影棚背景前，柔光照明。」只输出这一句话，不要解释。"
             ),
         },
     },
