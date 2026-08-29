@@ -605,9 +605,11 @@ def export_zip(project: str) -> Path:
 def resolve_upload_destination(project: str, name: str) -> tuple[Optional[Path], bool]:
     """计算上传目标路径（扩展名白名单 + 同名自动改名）。
 
+    先提取纯文件名（剥离 ``/``、``\\`` 等路径组件），防止路径穿越写出 images/ 目录。
+
     :return: (目标路径, 是否被改名)；扩展名不受支持时返回 (None, False)。
     """
-    name = name or ""
+    name = Path((name or "").replace("\\", "/")).name
     if Path(name).suffix.lower() not in IMAGE_EXTS:
         return None, False
     dst = images_dir(project) / name

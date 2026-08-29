@@ -41,7 +41,7 @@ python -m uvicorn app:app --host 0.0.0.0 --port 8080   # 打开 http://localhost
 
 新增依赖：修改 `requirements.txt` 后再次 `uv pip install -r requirements.txt`。
 
-> 架构说明：UI 层为 FastAPI + Jinja2 服务端渲染 + HTMX 局部刷新（见 `doc/重构方案-FastAPI-HTMX.md`）；业务逻辑全部在 `core.py`，不依赖任何 Web 框架。
+> 架构说明：UI 层为 FastAPI + Jinja2 服务端渲染 + HTMX 局部刷新（见 `doc/设计.md`）；业务逻辑全部在 `core.py`，不依赖任何 Web 框架。
 
 ## 三、Docker 部署
 

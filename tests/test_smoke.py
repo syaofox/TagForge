@@ -92,3 +92,15 @@ def test_settings_roundtrip(client):
     r = client.post("/api/settings", json={"concurrency": 7})
     assert r.status_code == 204
     assert core.state.settings["concurrency"] == 7
+
+
+def test_upload_sanitizes_path_traversal():
+    """回归：上传文件名含路径组件（/、\\、..）须剥离，防写出 images/ 目录。"""
+    dst, ren = core.resolve_upload_destination("pytest_tmp", "../../evil.png")
+    assert ren is False
+    assert dst == core.images_dir("pytest_tmp") / "evil.png"
+    assert not (core.DATASETS / "evil.png").exists()
+    dst2, _ = core.resolve_upload_destination("pytest_tmp", "sub/dir/x.png")
+    assert dst2 == core.images_dir("pytest_tmp") / "x.png"
+    dst3, _ = core.resolve_upload_destination("pytest_tmp", "..\\y.png")
+    assert dst3 == core.images_dir("pytest_tmp") / "y.png"
