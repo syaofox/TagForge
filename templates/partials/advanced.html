@@ -6,9 +6,9 @@
         <option value="{{ name }}" {{ 'selected' if settings.base_url == info.base_url and settings.model == info.model else '' }}>{{ name }}</option>
       {% endfor %}
     </select>
-    <button class="btn btn-icon" id="btn-add-preset" title="新增预设">＋</button>
-    <button class="btn btn-icon" id="btn-edit-preset" title="编辑当前预设">✎</button>
-    <button class="btn btn-icon" id="btn-del-preset" title="删除当前预设">🗑</button>
+    <button class="btn btn-icon" id="btn-add-preset" title="新增预设"><svg class="tf-icon tf-icon--md" aria-hidden="true"><use href="/static/icons.svg#icon-plus"/></svg></button>
+    <button class="btn btn-icon" id="btn-edit-preset" title="编辑当前预设"><svg class="tf-icon tf-icon--md" aria-hidden="true"><use href="/static/icons.svg#icon-pencil"/></svg></button>
+    <button class="btn btn-icon" id="btn-del-preset" title="删除当前预设"><svg class="tf-icon tf-icon--md" aria-hidden="true"><use href="/static/icons.svg#icon-trash"/></svg></button>
   </div>
   <label class="tf-label">Base URL</label>
   <input id="base-url" class="tf-input" type="text" value="{{ settings.base_url }}">
@@ -16,9 +16,9 @@
   <div class="tf-preset-row">
     <input id="model-name" class="tf-input" type="text" value="{{ settings.model }}" list="model-list" placeholder="输入或从下方选择">
     <datalist id="model-list"></datalist>
-    <button class="btn btn-icon" id="btn-refresh-models" title="从提供商刷新模型列表">⟳</button>
+    <button class="btn btn-icon" id="btn-refresh-models" title="从提供商刷新模型列表"><svg class="tf-icon tf-icon--md" aria-hidden="true"><use href="/static/icons.svg#icon-refresh"/></svg></button>
   </div>
   <label class="tf-label">API Key</label>
   <input id="api-key" class="tf-input" type="password" value="{{ settings.api_key }}">
-  <button class="btn btn-primary" id="btn-test-conn">测试连接</button>
+  <button class="btn btn-primary" id="btn-test-conn"><svg class="tf-icon tf-icon--sm" aria-hidden="true"><use href="/static/icons.svg#icon-external"/></svg> 测试连接</button>
 </div>

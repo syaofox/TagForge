@@ -114,10 +114,10 @@ def _grid_ctx() -> dict:
     shown = items[: st.view_page * core.PAGE_SIZE]
     remain = len(items) - len(shown)
     parts = [f"共 {stats['all']} 张"]
-    for key, icon in (("tagged", "🟢 已标注"), ("pending", "🟡 待标注"),
-                      ("failed", "🔴 失败"), ("processing", "🔵 处理中")):
+    for key, label in (("tagged", "已标注"), ("pending", "待标注"),
+                       ("failed", "失败"), ("processing", "处理中")):
         if stats[key]:
-            parts.append(f"{icon} {stats[key]}")
+            parts.append(f"{label} {stats[key]}")
     return {
         **_ctx(),
         "stats_line": " · ".join(parts),
@@ -430,15 +430,15 @@ async def trial(request: Request) -> Response:
         target.label = final
         total = (client.total_prompt_tokens + client.total_completion_tokens) if client else 0
         resp = _trigger(request, {"gridChanged": True, "detailReload": True, "tokensUpdated": True,
-                                  "toast": {"msg": f"✅ 试生成成功（{target.name}）：{final[:70]}",
+                                  "toast": {"msg": f"试生成成功（{target.name}）：{final[:70]}",
                                             "type": "positive"}})
         return resp
     except FatalAPIError as e:
         target.status = "failed"
-        return _toast(Response(status_code=500), f"❌ {e}", "negative")
+        return _toast(Response(status_code=500), f"{e}", "negative")
     except Exception as e:
         target.status = "failed"
-        return _toast(Response(status_code=500), f"❌ 试生成失败：{e}", "negative")
+        return _toast(Response(status_code=500), f"试生成失败：{e}", "negative")
 
 
 @app.post("/api/test-connection")
@@ -453,9 +453,9 @@ async def test_connection() -> JSONResponse:
     client = core.build_client()
     try:
         ok, detail = await client.ping()
-        return JSONResponse({"ok": ok, "detail": f"✅ API 可用：{detail}"})
+        return JSONResponse({"ok": ok, "detail": f"API 可用：{detail}"})
     except FatalAPIError as e:
-        return JSONResponse({"ok": False, "detail": f"❌ {e}"})
+        return JSONResponse({"ok": False, "detail": f"{e}"})
 
 
 @app.get("/api/export/{project}")

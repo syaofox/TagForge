@@ -1,17 +1,17 @@
 <div id="batch-card" class="tf-batch-card tf-wide" hidden>
   <div class="tf-batch-head">
     <span class="tf-batch-title">批量标注</span>
-    <span id="batch-status" class="tf-batch-status">处理中…</span>
-    <button class="btn btn-icon" id="btn-collapse-batch" title="收起（后台继续，进度见顶栏）">✕</button>
+    <span id="batch-status" class="tf-batch-status"><svg class="tf-icon tf-icon--sm tf-spin" aria-hidden="true"><use href="/static/icons.svg#icon-loader"/></svg> 处理中…</span>
+    <button class="btn btn-icon" id="btn-collapse-batch" title="收起（后台继续，进度见顶栏）"><svg class="tf-icon tf-icon--md" aria-hidden="true"><use href="/static/icons.svg#icon-x"/></svg></button>
   </div>
   <progress id="batch-progress" class="tf-progress" max="1" value="0"></progress>
   <div id="batch-stats" class="tf-muted tf-batch-stats"></div>
   <div class="tf-batch-actions">
-    <button class="btn btn-danger" id="btn-batch-stop">终止</button>
-    <button class="btn btn-ghost" id="btn-log-toggle">日志</button>
-    <button class="btn btn-ghost" id="btn-log-clear">清空</button>
-    <button class="btn btn-ghost" id="btn-log-copy">复制</button>
-    <button class="btn btn-amber" id="btn-retry-failed" hidden>重试失败</button>
+    <button class="btn btn-danger btn-sm" id="btn-batch-stop"><svg class="tf-icon tf-icon--sm" aria-hidden="true"><use href="/static/icons.svg#icon-stop"/></svg> 终止</button>
+    <button class="btn btn-ghost btn-sm" id="btn-log-toggle"><svg class="tf-icon tf-icon--sm" aria-hidden="true"><use href="/static/icons.svg#icon-log"/></svg> 日志</button>
+    <button class="btn btn-ghost btn-sm" id="btn-log-clear"><svg class="tf-icon tf-icon--sm" aria-hidden="true"><use href="/static/icons.svg#icon-eraser"/></svg> 清空</button>
+    <button class="btn btn-ghost btn-sm" id="btn-log-copy"><svg class="tf-icon tf-icon--sm" aria-hidden="true"><use href="/static/icons.svg#icon-copy"/></svg> 复制</button>
+    <button class="btn btn-amber btn-sm" id="btn-retry-failed" hidden><svg class="tf-icon tf-icon--sm" aria-hidden="true"><use href="/static/icons.svg#icon-refresh"/></svg> 重试失败</button>
   </div>
   <div id="batch-log" class="tf-log" hidden></div>
 </div>

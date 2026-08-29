@@ -8,7 +8,7 @@
   <label class="tf-label">提示词内容（可直接编辑）</label>
   <textarea id="prompt-text" class="tf-input tf-textarea" rows="8">{{ settings.system_prompt }}</textarea>
   <div class="tf-detail-actions">
-    <button class="btn btn-ghost" id="btn-restore-prompt">恢复默认</button>
+    <button class="btn btn-ghost btn-sm" id="btn-restore-prompt"><svg class="tf-icon tf-icon--sm" aria-hidden="true"><use href="/static/icons.svg#icon-refresh"/></svg> 恢复默认</button>
   </div>
   <div class="tf-muted tf-hint">选择预设自动填充；手动编辑提示词将切为「自定义」</div>
 
@@ -27,5 +27,5 @@
   <label class="tf-label">并发数</label>
   <input id="concurrency" class="tf-input" type="number" min="1" max="32" step="1" value="{{ settings.concurrency }}">
   <hr class="tf-sep">
-  <button class="btn btn-teal btn-block" id="btn-export">打包导出</button>
+  <button class="btn btn-ghost btn-block" id="btn-export" style="border:1px solid var(--tf-border);"><svg class="tf-icon tf-icon--sm" aria-hidden="true"><use href="/static/icons.svg#icon-zip"/></svg> 打包导出</button>
 </div>

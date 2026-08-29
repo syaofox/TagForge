@@ -1,9 +1,9 @@
 <div class="tf-detail-head">
   <div>
     <div class="tf-detail-title">{{ entry.path.name if entry else '图片不存在' }}</div>
-    <div class="tf-detail-nav">◀ ▶ 可切换上一张 / 下一张</div>
+    <div class="tf-detail-nav"><svg class="tf-icon tf-icon--sm" aria-hidden="true"><use href="/static/icons.svg#icon-chevron-left"/></svg> <svg class="tf-icon tf-icon--sm" aria-hidden="true"><use href="/static/icons.svg#icon-chevron-right"/></svg> 可切换上一张 / 下一张</div>
   </div>
-  <button class="btn btn-icon" id="btn-detail-close" title="关闭">✕</button>
+  <button class="btn btn-icon" id="btn-detail-close" title="关闭"><svg class="tf-icon tf-icon--md" aria-hidden="true"><use href="/static/icons.svg#icon-x"/></svg></button>
 </div>
 {% if entry %}
 <img class="tf-detail-img"
@@ -20,19 +20,19 @@
   <button class="btn btn-primary" id="btn-regenerate"
           hx-post="/api/regenerate"
           hx-vals='{"project": "{{ project }}", "name": "{{ entry.name }}"}'
-          hx-swap="none">重新生成</button>
+          hx-swap="none"><svg class="tf-icon tf-icon--sm" aria-hidden="true"><use href="/static/icons.svg#icon-refresh"/></svg> 重新生成</button>
   <span id="gen-spinner" class="tf-spinner" hidden></span>
-  <button class="btn btn-danger" id="btn-delete-image">删除图片</button>
+  <button class="btn btn-danger" id="btn-delete-image"><svg class="tf-icon tf-icon--sm" aria-hidden="true"><use href="/static/icons.svg#icon-trash"/></svg> 删除图片</button>
 </div>
-<div class="tf-detail-actions" style="justify-content:space-between">
+<div class="tf-detail-pager">
   {% if prev %}
-  <button class="btn btn-ghost" hx-get="/partials/detail?project={{ uq(project) }}&name={{ uq(prev.name) }}"
-          hx-target="#detail-drawer" hx-swap="innerHTML">◀ 上一张</button>
+  <button class="btn btn-ghost btn-sm" hx-get="/partials/detail?project={{ uq(project) }}&name={{ uq(prev.name) }}"
+          hx-target="#detail-drawer" hx-swap="innerHTML"><svg class="tf-icon tf-icon--sm" aria-hidden="true"><use href="/static/icons.svg#icon-chevron-left"/></svg> 上一张</button>
   {% else %}<span></span>{% endif %}
   <span class="tf-chip">{{ index + 1 }} / {{ total }}</span>
   {% if next %}
-  <button class="btn btn-ghost" hx-get="/partials/detail?project={{ uq(project) }}&name={{ uq(next.name) }}"
-          hx-target="#detail-drawer" hx-swap="innerHTML">下一张 ▶</button>
+  <button class="btn btn-ghost btn-sm" hx-get="/partials/detail?project={{ uq(project) }}&name={{ uq(next.name) }}"
+          hx-target="#detail-drawer" hx-swap="innerHTML">下一张 <svg class="tf-icon tf-icon--sm" aria-hidden="true"><use href="/static/icons.svg#icon-chevron-right"/></svg></button>
   {% else %}<span></span>{% endif %}
 </div>
 {% endif %}

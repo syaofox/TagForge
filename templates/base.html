@@ -12,13 +12,13 @@
 <body>
   <header id="app-header" class="tf-header">
     <div class="tf-header-left">
-      <span class="tf-logo">⚒️ TagForge</span>
+      <span class="tf-logo"><svg class="tf-icon" aria-hidden="true"><use href="/static/icons.svg#icon-logo"/></svg> TagForge</span>
       <span class="tf-tagline">LoRA 数据集图片打标工具</span>
     </div>
     <div class="tf-header-right">
       <span id="header-model" class="tf-header-chip">模型：{{ settings.model }}</span>
-      <span id="header-tokens" class="tf-header-chip">Tokens：0</span>
-      <button class="tf-header-chip" id="btn-help" style="border:none;cursor:pointer;background:rgba(255,255,255,.16);color:#fff;border-radius:999px;padding:4px 10px;font-size:.72rem">?</button>
+      <span id="header-tokens" class="tf-header-chip"><svg class="tf-icon tf-icon--sm" aria-hidden="true"><use href="/static/icons.svg#icon-loader"/></svg> Tokens：0</span>
+      <button class="tf-header-chip tf-header-chip--icon" id="btn-help" title="帮助" style="border:none;cursor:pointer"><svg class="tf-icon tf-icon--md" aria-hidden="true"><use href="/static/icons.svg#icon-help"/></svg></button>
       <label class="tf-switch"><input type="checkbox" id="dark-switch" {{ 'checked' if settings.dark else '' }}> 深色</label>
     </div>
   </header>

@@ -1,5 +1,5 @@
 {% if current and not client_ready %}
-<div id="api-banner" class="tf-banner" hx-swap-oob="outerHTML">⚠️ 尚未配置可用的 API（需 Base URL / 模型名；Ollama 之外还需 API Key）。配置后点「测试连接」验证可用后再批量标注。</div>
+<div id="api-banner" class="tf-banner" hx-swap-oob="outerHTML"><svg class="tf-icon tf-icon--md" aria-hidden="true"><use href="/static/icons.svg#icon-alert"/></svg> 尚未配置可用的 API（需 Base URL / 模型名；Ollama 之外还需 API Key）。配置后点「测试连接」验证可用后再批量标注。</div>
 {% else %}
 <div id="api-banner" class="tf-banner" hx-swap-oob="outerHTML" hidden></div>
 {% endif %}

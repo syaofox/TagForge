@@ -155,7 +155,8 @@
     const btn = e.target && e.target.closest ? e.target.closest("#btn-regenerate") : null;
     if (!btn) return;
     btn.disabled = true;
-    btn.textContent = "生成中…";
+    if (!btn.dataset.origHtml) btn.dataset.origHtml = btn.innerHTML;
+    btn.innerHTML = '<svg class="tf-icon tf-icon--sm tf-spin" aria-hidden="true"><use href="/static/icons.svg#icon-loader"/></svg> 生成中…';
     const sp = $("#gen-spinner");
     if (sp) sp.hidden = false;
   });
@@ -163,7 +164,8 @@
     const btn = e.target && e.target.closest ? e.target.closest("#btn-regenerate") : null;
     if (!btn) return;
     btn.disabled = false;
-    btn.textContent = "重新生成";
+    if (btn.dataset.origHtml) { btn.innerHTML = btn.dataset.origHtml; delete btn.dataset.origHtml; }
+    else btn.innerHTML = '<svg class="tf-icon tf-icon--sm" aria-hidden="true"><use href="/static/icons.svg#icon-refresh"/></svg> 重新生成';
     const sp = $("#gen-spinner");
     if (sp) sp.hidden = true;
   });
@@ -252,7 +254,17 @@
   // ---------- 批量标注（SSE 进度） ----------
   let batchES = null;
   function showBatchCard(v) { const c = $("#batch-card"); if (c) c.hidden = !v; }
-  function batchSetStatus(t) { const el = $("#batch-status"); if (el) el.textContent = t; }
+  function batchSetStatus(t) {
+    const el = $("#batch-status");
+    if (!el) return;
+    // t 为纯文本或 HTML；统一按纯文本处理，自动补图标
+    el.textContent = t;
+  }
+  function batchSetStatusHtml(html) {
+    const el = $("#batch-status");
+    if (!el) return;
+    el.innerHTML = html;
+  }
   function batchSetProgress(v) { const p = $("#batch-progress"); if (p) p.value = v; }
   function batchAppendLog(line) {
     const box = $("#batch-log");
@@ -264,12 +276,13 @@
     box.scrollTop = box.scrollHeight;
   }
   function batchFinish(d) {
-    batchSetStatus(d.aborted ? "⏹ 已终止（本次完成 " + d.done + "/" + d.total + "）" : "✅ 完成（成功 " + d.ok + " · 失败 " + d.fail + "）");
+    if (d.aborted) batchSetStatusHtml('<svg class="tf-icon tf-icon--sm" aria-hidden="true"><use href="/static/icons.svg#icon-stop"/></svg> 已终止（本次完成 ' + d.done + "/" + d.total + "）");
+    else batchSetStatusHtml('<svg class="tf-icon tf-icon--sm" aria-hidden="true"><use href="/static/icons.svg#icon-check-circle"/></svg> 完成（成功 ' + d.ok + " · 失败 " + d.fail + "）");
     const stop = $("#btn-batch-stop"); if (stop) stop.disabled = true;
     const mp = $("#main-progress"); if (mp) mp.hidden = true;
     if (d.fail > 0) {
       const rb = $("#btn-retry-failed");
-      if (rb) { rb.textContent = "重试失败 " + d.fail; rb.hidden = false; }
+      if (rb) { rb.innerHTML = '<svg class="tf-icon tf-icon--sm" aria-hidden="true"><use href="/static/icons.svg#icon-refresh"/></svg> 重试失败 ' + d.fail; rb.hidden = false; }
     }
   }
   function startBatchSSE() {
@@ -280,7 +293,7 @@
     const lg = $("#batch-log"); if (lg) { lg.hidden = true; lg.innerHTML = ""; }
     const rb = $("#btn-retry-failed"); if (rb) rb.hidden = true;
     const stop = $("#btn-batch-stop"); if (stop) stop.disabled = false;
-    batchSetStatus("处理中…");
+    batchSetStatusHtml('<svg class="tf-icon tf-icon--sm tf-spin" aria-hidden="true"><use href="/static/icons.svg#icon-loader"/></svg> 处理中…');
     const mp = $("#main-progress"); if (mp) { mp.hidden = false; mp.value = 0; }
     let done = false;
     batchES = new EventSource("/api/batch/events");
@@ -288,7 +301,7 @@
       const d = JSON.parse(e.data);
       batchSetProgress(d.total ? d.done / d.total : 0);
       const st = $("#batch-stats");
-      if (st) st.textContent = "完成 " + d.done + "/" + d.total + " · ✅ " + d.ok + " · ❌ " + d.fail + " · ⏱ " + Math.round(d.elapsed) + "s";
+      if (st) st.textContent = "完成 " + d.done + "/" + d.total + " · 成功 " + d.ok + " · 失败 " + d.fail + " · " + Math.round(d.elapsed) + "s";
     });
     batchES.addEventListener("log", (e) => batchAppendLog(JSON.parse(e.data).text));
     batchES.addEventListener("done", (e) => {
@@ -330,17 +343,17 @@
   });
   $("#btn-test-conn")?.addEventListener("click", async () => {
     const btn = $("#btn-test-conn");
-    const orig = btn.textContent;
-    btn.disabled = true; btn.textContent = "测试中…";
+    const orig = btn.innerHTML;
+    btn.disabled = true; btn.innerHTML = '<svg class="tf-icon tf-icon--sm tf-spin" aria-hidden="true"><use href="/static/icons.svg#icon-loader"/></svg> 测试中…';
     TF.saveSetting("base_url", $("#base-url").value);
     TF.saveSetting("model", $("#model-name").value);
     TF.saveSetting("api_key", $("#api-key").value);
     try {
       const r = await fetch("/api/test-connection", { method: "POST" });
       const j = await r.json();
-      TF.toast(j.detail || (j.ok ? "✅ API 可用" : "❌ 连接失败"), j.ok ? "positive" : "negative", 9000);
+      TF.toast(j.detail || (j.ok ? "API 可用" : "连接失败"), j.ok ? "positive" : "negative", 9000);
     } catch (_) { TF.toast("测试请求失败", "negative"); }
-    btn.disabled = false; btn.textContent = orig;
+    btn.disabled = false; btn.innerHTML = orig;
   });
   $("#btn-trial")?.addEventListener("click", () => htmx.ajax("POST", "/api/trial", { swap: "none" }));
 
@@ -350,7 +363,7 @@
       const r = await fetch("/api/status/tokens");
       const j = await r.json();
       const el = $("#header-tokens");
-      if (el) el.textContent = "Tokens：" + (j.total || 0);
+      if (el) el.innerHTML = '<svg class="tf-icon tf-icon--sm" aria-hidden="true"><use href="/static/icons.svg#icon-loader"/></svg> Tokens：' + (j.total || 0);
     } catch (_) {}
   });
 
@@ -399,7 +412,7 @@
   // ---------- 模型列表（从提供商拉取，不缓存） ----------
   async function fetchModels(baseUrl, apiKey, silent) {
     const btn = $("#btn-refresh-models");
-    if (btn) { btn.disabled = true; btn.textContent = "…"; }
+    if (btn) { btn.disabled = true; btn.innerHTML = '<svg class="tf-icon tf-icon--md tf-spin" aria-hidden="true"><use href="/static/icons.svg#icon-loader"/></svg>'; }
     try {
       const r = await fetch("/api/models", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -426,7 +439,7 @@
     } catch (_) {
       if (!silent) TF.toast("获取模型列表失败", "negative");
     } finally {
-      if (btn) { btn.disabled = false; btn.textContent = "⟳"; }
+      if (btn) { btn.disabled = false; btn.innerHTML = '<svg class="tf-icon tf-icon--md" aria-hidden="true"><use href="/static/icons.svg#icon-refresh"/></svg>'; }
     }
   }
   $("#btn-refresh-models")?.addEventListener("click", () => fetchModels($("#base-url").value, $("#api-key").value, false));

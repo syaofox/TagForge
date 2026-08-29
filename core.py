@@ -275,10 +275,10 @@ DEFAULT_MODEL_PRESETS = {
 }
 
 STATUS_TEXT = {
-    "tagged": "🟢 已标注",
-    "pending": "🟡 待标注",
-    "processing": "🔵 处理中",
-    "failed": "🔴 失败",
+    "tagged": "已标注",
+    "pending": "待标注",
+    "processing": "处理中",
+    "failed": "失败",
 }
 STATUS_COLOR = {
     "tagged": "#22c55e",
@@ -775,16 +775,16 @@ async def run_batch(targets: list, project: str, settings: dict,
                 entry.status = "tagged"
                 _emit({"type": "mark", "name": entry.name, "status": "tagged"})
                 ok_count += 1
-                _emit({"type": "log", "text": f"{entry.name} ✅ 成功 ({time.perf_counter() - t0:.1f}s)"})
+                _emit({"type": "log", "text": f"{entry.name} 成功 ({time.perf_counter() - t0:.1f}s)"})
             except FatalAPIError as e:
                 entry.status = "failed"
                 fail_count += 1
-                _emit({"type": "log", "text": f"{entry.name} ⚠️ {e}"})
+                _emit({"type": "log", "text": f"{entry.name} 失败 {e}"})
                 state.abort_batch = True  # 致命错误：中止整批
             except Exception as e:
                 entry.status = "failed"
                 fail_count += 1
-                _emit({"type": "log", "text": f"{entry.name} ❌ 失败：{e}"})
+                _emit({"type": "log", "text": f"{entry.name} 失败：{e}"})
             finally:
                 done += 1
                 _emit({"type": "progress", "done": done, "total": total, "ok": ok_count,
@@ -802,9 +802,9 @@ async def run_batch(targets: list, project: str, settings: dict,
         for t in targets:
             if t.status == "processing":
                 t.status = "pending"
-        _emit({"type": "log", "text": f"⏹ 已终止（本次完成 {done}/{total}）"})
+        _emit({"type": "log", "text": f"已终止（本次完成 {done}/{total}）"})
     else:
-        _emit({"type": "log", "text": f"🎉 完成：成功 {ok_count} / {total}（失败 {fail_count}）"})
+        _emit({"type": "log", "text": f"完成：成功 {ok_count} / {total}（失败 {fail_count}）"})
 
     result = {
         "ok": ok_count, "fail": fail_count, "done": done, "total": total,
