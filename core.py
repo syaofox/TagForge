@@ -267,15 +267,11 @@ DEFAULT_SETTINGS = {
     "preset_keys": {},  # 模型预设 -> API Key（明文，仅存于 gitignore 的 settings.json）
 }
 
-# 内置模型预设（名称 -> Base URL / 默认模型）。Claude 需中转站、DeepSeek-VL 需自建端点、Ollama 需 /v1。
+# 内置模型预设（名称 -> Base URL / 默认模型）。
 # 用户可以覆盖（同名写入自定义）或删除（移入删除标记）；「统一」处理：见 get_effective_presets。
 DEFAULT_MODEL_PRESETS = {
     "OpenCode (Zen/Go)": {"base_url": "https://opencode.ai/zen/go/v1", "model": "deepseek-v4-flash-vision-exp"},
     "DeepSeek (官方)": {"base_url": "https://api.deepseek.com", "model": "deepseek-v4-flash-vision-exp"},
-    "OpenAI (GPT-4o)": {"base_url": "https://api.openai.com/v1", "model": "gpt-4o-mini"},
-    "Claude 3.5（中转站）": {"base_url": "https://api.anthropic.com/v1", "model": "claude-3-5-sonnet-latest"},
-    "DeepSeek-VL（自建/中转）": {"base_url": "", "model": "deepseek-vl2"},
-    "Ollama（本地）": {"base_url": "http://localhost:11434/v1", "model": "llava"},
 }
 
 STATUS_TEXT = {

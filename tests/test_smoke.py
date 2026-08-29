@@ -132,34 +132,31 @@ def test_preset_crud(client):
 
 def test_preset_overrides_and_deletes_builtin(client):
     """统一处理：内置预设可覆盖（同名写入自定义）；纯内置可删除（移入 removed 标记）。"""
-    name = "Ollama（本地）"
+    name = "OpenCode (Zen/Go)"
     r = client.post("/api/settings/presets", json={
-        "name": name, "base_url": "http://127.0.0.1:11434/v1", "model": "my-llava"})
+        "name": name, "base_url": "http://127.0.0.1:11434/v1", "model": "my-model"})
     assert r.status_code == 200
-    assert client.get("/api/settings/presets").json()["presets"][name]["model"] == "my-llava"
+    assert client.get("/api/settings/presets").json()["presets"][name]["model"] == "my-model"
     # 删除被覆盖的内置 -> 仅移除覆盖，回到默认
     client.delete("/api/settings/presets?name=" + quote(name))
-    assert client.get("/api/settings/presets").json()["presets"][name]["model"] == "llava"
+    assert client.get("/api/settings/presets").json()["presets"][name]["model"] == "deepseek-v4-flash-vision-exp"
     # 删除纯内置 -> 从生效列表消失，且不误删其它
     client.delete("/api/settings/presets?name=" + quote(name))
     eff = client.get("/api/settings/presets").json()["presets"]
-    assert name not in eff and "OpenAI (GPT-4o)" in eff
+    assert name not in eff and "DeepSeek (官方)" in eff
 
 
 def test_preset_delete_with_slash_in_name(client):
-    """回归：预设名含 `/`（如「DeepSeek-VL（自建/中转）」）时，名称须走 query 而非路径段。"""
-    name = "DeepSeek-VL（自建/中转）"
-    # 选中该预设时的 preset_info 回填
+    """回归：预设名含 `/`（%2F 拆段）时，名称须走 query 而非路径段。"""
+    name = "My/中转（自建）"
+    r = client.post("/api/settings/presets", json={
+        "name": name, "base_url": "http://x/v1", "model": "m"})
+    assert r.status_code == 200
     j = client.get("/api/settings/preset?name=" + quote(name, safe="")).json()
-    assert j["name"] == name and j["base_url"] == ""
-    # 删除内置
+    assert j["name"] == name and j["base_url"] == "http://x/v1"
     r = client.delete("/api/settings/presets?name=" + quote(name, safe=""))
     assert r.status_code == 200
     assert name not in client.get("/api/settings/presets").json()["presets"]
-    # 同名自定义覆盖后删除 -> 回到默认
-    client.post("/api/settings/presets", json={"name": name, "base_url": "http://x/v1", "model": "m"})
-    client.delete("/api/settings/presets?name=" + quote(name, safe=""))
-    assert client.get("/api/settings/presets").json()["presets"][name]["model"] == "deepseek-vl2"
 
 
 def test_preset_rename_migrates_key(client):

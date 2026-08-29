@@ -488,7 +488,7 @@ async def save_setting(request: Request) -> Response:
 
 @app.get("/api/settings/preset")
 async def preset_info(request: Request) -> JSONResponse:
-    # 预设名经 query 传递：名称可含 `/` 等字符，放路径段会被 %2F 拆断（如「DeepSeek-VL（自建/中转）」）
+    # 预设名经 query 传递：名称可含 `/` 等字符，放路径段会被 %2F 拆断（预设名可含 `/`）
     name = request.query_params.get("name") or ""
     preset = core.get_effective_presets().get(name)
     if not preset:
@@ -521,7 +521,7 @@ async def presets_save(request: Request) -> JSONResponse:
 
 @app.delete("/api/settings/presets")
 async def presets_delete(request: Request) -> JSONResponse:
-    # 预设名经 query 传递：名称可含 `/`，放路径段会被 %2F 拆断（如「DeepSeek-VL（自建/中转）」）
+    # 预设名经 query 传递：名称可含 `/`，放路径段会被 %2F 拆断（预设名可含 `/`）
     name = request.query_params.get("name") or ""
     core.delete_preset(name)
     return JSONResponse({"ok": True, "presets": core.get_effective_presets()})
