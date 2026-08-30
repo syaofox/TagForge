@@ -1,5 +1,8 @@
+name: tagforge
 services:
   tagforge:
+    image: tagforge:latest
+    container_name: tagforge
     build: .
     ports:
       - "8080:8080"
@@ -9,4 +12,11 @@ services:
       - ./datasets:/app/datasets
       - ./config:/app/config
       - ./exports:/app/exports
+    user: "${UID:-1000}:${GID:-1000}"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/', timeout=2)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
