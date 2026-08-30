@@ -1,0 +1,33 @@
+[project]
+name = "tagforge"
+version = "0.1.0"
+description = "LoRA 数据集图片打标工具：Web 端批量标注，单机 / 局域网单人使用"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "TagForge" }]
+dependencies = [
+    "fastapi==0.141.1",
+    "uvicorn==0.52.4",
+    "jinja2==3.1.6",
+    "openai==1.109.1",
+    "httpx==0.28.1",
+    "pillow==11.3.0",
+    "python-multipart==0.0.32",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1",
+]
+
+[tool.uv]
+package = false

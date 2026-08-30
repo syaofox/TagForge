@@ -26,15 +26,16 @@ LoRA 数据集图片打标工具：Web 端批量标注，单机 / 局域网单�
 - **交互**：局部刷新走 HTMX，事件用 `HX-Trigger` 广播（`gridChanged` / `detailReload` / `detailClosed` / `batchStarted` / `tokensUpdated`，契约见 `doc/设计.md` §五）；仅批量进度走 SSE（`/api/batch/events`）。
 - **批量任务**：存 `core.state.batch`（asyncio task），shutdown 时取消；进度回调 `_enqueue` 快照式入队，保证最新事件不丢。
 - **提示词预设**：三维组合 `语言 × 格式 × 训练目标`，定义在 `core.PROMPT_PRESETS` / `DEFAULT_PROMPTS` / `TRAINING_PROMPTS`，预设校验与兼容迁移逻辑在 `core.load_settings`。
-- **依赖唯一来源**：`requirements.txt`（Docker 共用）。注释 / 文档用中文。
+- **依赖**：`pyproject.toml` 为主（`uv sync` 生成 `uv.lock` 已提交），`requirements.txt` 为 Docker/`pip` 兼容导出（`uv export --format requirements-txt > requirements.txt`），两者版本保持一致（均已 pin）。注释 / 文档用中文。
 
 ## 开发与测试
 
 ```bash
-uv venv && source .venv/bin/activate
-uv pip install -r requirements.txt      # 新增依赖：改 requirements.txt 后重装
-python -m uvicorn app:app --host 0.0.0.0 --port 8080
-pytest                                   # testpaths = tests
+uv sync                                 # 或：uv venv && uv pip install -r requirements.txt
+source .venv/bin/activate               # Windows: .venv\Scripts\activate
+uv run python -m uvicorn app:app --host 0.0.0.0 --port 8080
+uv run pytest                           # testpaths = tests，pythonpath = .
+# 新增依赖：uv add <pkg> 或改 pyproject.toml 后 uv sync；同步导出 requirements.txt：uv export --format requirements-txt --no-hashes > requirements.txt
 ```
 
 - 测试用 `pytest_tmp` 项目；`tests/conftest.py` 自动保护 `config/settings.json`（测试前后原样还原）。
