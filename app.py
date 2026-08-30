@@ -118,11 +118,14 @@ def _grid_ctx() -> dict:
                        ("failed", "失败"), ("processing", "处理中")):
         if stats[key]:
             parts.append(f"{label} {stats[key]}")
+    # 批量清除：当前筛选结果中可清除（已标注+失败）的数量，用于 meta 栏按钮文案/禁用态
+    clearable = sum(1 for e in items if e.status in ("tagged", "failed"))
     return {
         **_ctx(),
         "stats_line": " · ".join(parts),
         "items": items, "shown": shown, "remain": remain,
         "filter": st.view_filter, "q": st.view_query, "view_page": st.view_page,
+        "clearable": clearable,
     }
 
 
@@ -248,6 +251,60 @@ async def save_label(request: Request, project: str, name: str) -> Response:
         entry.status = "tagged" if text else "pending"
         entry.label = text
     resp = _trigger(request, {"gridChanged": True})
+    return resp
+
+
+@app.delete("/api/label/{project}/{name}")
+async def clear_label(request: Request, project: str, name: str) -> Response:
+    """单张清除标注：删标签文件 + 内存 pending。需确认已有前端对话框。"""
+    if core.state.batch is not None and not core.state.batch.done():
+        return _toast(Response(status_code=400), "有批量任务进行中，请先终止", "warning")
+    project = project or core.state.current or ""
+    if not project:
+        return _toast(Response(status_code=400), "请先选择项目", "warning")
+    entry = _find_entry(name)
+    if entry is None:
+        return _toast(Response(status_code=404), "未找到该图片", "warning")
+    if entry.status not in ("tagged", "failed"):
+        return _toast(Response(status_code=400), "该图片无需清除", "info")
+    core.clear_label(project, name)
+    resp = _trigger(request, {"gridChanged": True, "detailReload": True,
+                               "toast": {"msg": f"已清除 {name} 的标注", "type": "positive"}})
+    return resp
+
+
+@app.post("/api/labels/clear")
+async def clear_labels(request: Request) -> Response:
+    """批量清除：尊重当前筛选（filter/q），清除筛选结果中 tagged+failed。
+
+    前端可传 JSON {names?:[str]} 指定名单；为空则按 state.view_filter/view_query 计算。
+    """
+    if core.state.batch is not None and not core.state.batch.done():
+        return _toast(Response(status_code=400), "有批量任务进行中，请先终止", "warning")
+    project = core.state.current
+    if not project:
+        return _toast(Response(status_code=400), "请先选择项目", "warning")
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    body = body or {}
+    names = body.get("names")
+    if isinstance(names, list) and names:
+        # 显式名单：仅保留实际存在且可清除的
+        targets = [n for n in names if _find_entry(str(n)) is not None
+                   and _find_entry(str(n)).status in ("tagged", "failed")]
+    else:
+        # 尊重当前筛选/搜索：filtered_entries 中 tagged/failed
+        targets = [e.name for e in core.filtered_entries() if e.status in ("tagged", "failed")]
+    if not targets:
+        return _toast(Response(status_code=400), "当前筛选结果中没有可清除的已标注/失败", "info")
+    cleared = core.clear_labels(project, targets)
+    if cleared == 0:
+        return _toast(Response(status_code=400), "没有可清除的标注", "info")
+    resp = _trigger(request, {"gridChanged": True, "detailReload": True,
+                               "toast": {"msg": f"已清除 {cleared} 张的标注", "type": "positive"}})
     return resp
 
 

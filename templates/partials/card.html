@@ -4,6 +4,9 @@
   {% if entry.status == 'tagged' %}<span class="tf-check"><svg class="tf-icon" aria-hidden="true"><use href="/static/icons.svg#icon-check"/></svg></span>{% endif %}
   <img class="tf-card-img" loading="lazy" src="/api/image/thumb/{{ uq(project) }}/{{ uq(entry.name) }}" alt="{{ entry.name }}">
   <span class="tf-badge tf-badge--{{ entry.status }}"><svg class="tf-icon" aria-hidden="true">{% if entry.status == 'tagged' %}<use href="/static/icons.svg#icon-check-circle"/>{% elif entry.status == 'pending' %}<use href="/static/icons.svg#icon-clock"/>{% elif entry.status == 'failed' %}<use href="/static/icons.svg#icon-x-circle"/>{% else %}<use href="/static/icons.svg#icon-loader"/>{% endif %}</svg> {{ status_text[entry.status] }}</span>
+  {% if entry.status in ('tagged', 'failed') %}
+  <button class="tf-card-clear" data-clear="{{ entry.name }}" title="清除标注"><svg class="tf-icon tf-icon--sm" aria-hidden="true"><use href="/static/icons.svg#icon-eraser"/></svg></button>
+  {% endif %}
   {% if entry.label %}<div class="tf-card-caption">{{ entry.label }}</div>{% endif %}
   <div class="tf-card-name" title="{{ entry.name }}">{{ entry.name }}</div>
 </div>

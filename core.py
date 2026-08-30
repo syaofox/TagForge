@@ -523,6 +523,41 @@ def write_label(project: str, image_name: str, text: str) -> None:
     (d / f"{Path(image_name).stem}.txt").write_text(text, encoding="utf-8")
 
 
+def clear_label(project: str, image_name: str) -> bool:
+    """清除单张标注：删除标签文件并将内存状态置为 pending。
+
+    - 磁盘：若 ``labels/<stem>.txt`` 存在则 ``unlink``（幂等）。
+    - 内存：若 ``state.entries`` 中存在该条目且原状态为 ``tagged/failed`` 视为“发生了清除”。
+    :return: 是否真正清除了一个已标注/失败条目（用于 toast 计数）。
+    """
+    lp = label_file(project, image_name)
+    try:
+        if lp.is_file():
+            lp.unlink()
+    except OSError:
+        pass
+    # 也清理因异常残留的空文件（read_status 视作 pending，但保持磁盘干净）
+    entry = next((e for e in state.entries if e.name == image_name), None)
+    if entry is not None:
+        was_clearable = entry.status in ("tagged", "failed")
+        entry.status = "pending"
+        entry.label = ""
+        return was_clearable
+    return False
+
+
+def clear_labels(project: str, names: list[str]) -> int:
+    """批量清除指定名单的标注，返回实际清除数。
+
+    :param names: 待清除的文件名列表（已过滤为可清除集合）。
+    """
+    cleared = 0
+    for n in names:
+        if clear_label(project, n):
+            cleared += 1
+    return cleared
+
+
 def apply_prefix(text: str, prefix: str, prefix_mode: str) -> str:
     """按 prefix_mode 对生成文本应用触发词前缀，并避免重复叠加。"""
     prefix = prefix.strip()

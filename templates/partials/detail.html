@@ -22,6 +22,9 @@
           hx-vals='{"project": "{{ project }}", "name": "{{ entry.name }}"}'
           hx-swap="none"><svg class="tf-icon tf-icon--sm" aria-hidden="true"><use href="/static/icons.svg#icon-refresh"/></svg> 重新生成</button>
   <span id="gen-spinner" class="tf-spinner" hidden></span>
+  {% if entry.status in ('tagged', 'failed') %}
+  <button class="btn btn-ghost" id="btn-clear-label" style="border:1px solid var(--tf-border);"><svg class="tf-icon tf-icon--sm" aria-hidden="true"><use href="/static/icons.svg#icon-eraser"/></svg> 清除标注</button>
+  {% endif %}
   <button class="btn btn-danger" id="btn-delete-image"><svg class="tf-icon tf-icon--sm" aria-hidden="true"><use href="/static/icons.svg#icon-trash"/></svg> 删除图片</button>
 </div>
 <div class="tf-detail-pager">

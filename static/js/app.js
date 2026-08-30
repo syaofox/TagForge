@@ -150,6 +150,50 @@
     });
   });
 
+  // ---------- 清除标注（详情单张 + 卡片 hover 快捷） ----------
+  document.body.addEventListener("click", (e) => {
+    const btn = e.target.closest("#btn-clear-label");
+    if (!btn) return;
+    const name = $("#detail-drawer")?.dataset.name;
+    const project = $("#toolbar-title")?.textContent;
+    if (!name || !project || project === "（未选择项目）") return;
+    TF.confirm("确定清除「" + name + "」的标注吗？标签文件将被删除。").then((yes) => {
+      if (yes) htmx.ajax("DELETE", "/api/label/" + encodeURIComponent(project) + "/" + encodeURIComponent(name), { target: "body", swap: "none" });
+    });
+  });
+  // 卡片 hover 快捷清除（tagged/failed 卡片右下角橡皮）—— capture 阶段拦截，防止触发卡片的 hx-get
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest(".tf-card-clear");
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+    const name = btn.dataset.clear;
+    const project = $("#toolbar-title")?.textContent;
+    if (!name || !project || project === "（未选择项目）") return;
+    TF.confirm("确定清除「" + name + "」的标注吗？").then((yes) => {
+      if (yes) htmx.ajax("DELETE", "/api/label/" + encodeURIComponent(project) + "/" + encodeURIComponent(name), { target: "body", swap: "none" });
+    });
+  }, true);
+  // 批量清除：尊重当前筛选（meta 栏按钮，显示 clearable 数量）
+  document.body.addEventListener("click", (e) => {
+    const btn = e.target.closest("#btn-clear-filtered");
+    if (!btn) return;
+    if (btn.disabled) return;
+    const chip = document.querySelector("#meta-bar .tf-chip");
+    const hint = chip ? chip.textContent : "";
+    // 从按钮文案提取数量，如 "清除已标注 (3)" -> 3；无则用 clearable
+    let count = 0;
+    const m = btn.textContent.match(/\((\d+)\)/);
+    if (m) count = parseInt(m[1], 10);
+    const msg = count
+      ? "确定清除当前筛选结果中 " + count + " 张已标注/失败的标签吗？此操作不可恢复。"
+      : "确定清除当前筛选结果中全部已标注/失败的标签吗？";
+    TF.confirm(msg).then((yes) => {
+      if (yes) htmx.ajax("POST", "/api/labels/clear", { target: "body", swap: "none" });
+    });
+  });
+
   // ---------- 再生按钮状态（委托：详情内容每次被 htmx 替换，直接绑定会丢失） ----------
   document.body.addEventListener("htmx:beforeRequest", (e) => {
     const btn = e.target && e.target.closest ? e.target.closest("#btn-regenerate") : null;

@@ -255,6 +255,18 @@ button, input, select, textarea { font: inherit; }
 }
 :root[data-theme="dark"] .tf-check { color: #0f2124; }
 .tf-check .tf-icon { width: 11px; height: 11px; }
+.tf-card-clear {
+  position: absolute; bottom: 6px; right: 6px;
+  width: 26px; height: 26px; border-radius: var(--tf-radius-pill);
+  background: var(--tf-surface); border: 1px solid var(--tf-border);
+  color: var(--tf-muted); display: none;
+  align-items: center; justify-content: center;
+  cursor: pointer; box-shadow: var(--tf-shadow-sm);
+  z-index: 2; padding: 0;
+}
+.tf-card-clear:hover { background: var(--tf-surface-2); color: var(--tf-danger); border-color: var(--tf-danger); }
+.tf-card:hover .tf-card-clear { display: inline-flex; }
+.tf-card-clear .tf-icon { width: 13px; height: 13px; }
 .tf-empty {
   padding: 36px 12px; text-align: center; color: var(--tf-muted);
   font-size: 12.5px; line-height: 1.6;
