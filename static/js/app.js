@@ -105,7 +105,11 @@
 
 
   // ---------- 事件总线（HX-Trigger -> 自定义事件） ----------
+  let _lastGrid = 0;
   function refreshGrid() {
+    const now = Date.now();
+    if (now - _lastGrid < 300) return;
+    _lastGrid = now;
     if ($("#grid")) htmx.ajax("GET", "/partials/grid_cards", gridSwap);
   }
   document.addEventListener("gridChanged", refreshGrid);
@@ -119,6 +123,30 @@
     }
   });
   document.addEventListener("detailClosed", closeDetail);
+  // 兜底：204 + swap:none 时部分 htmx 版本 HX-Trigger 可能未冒泡到 document，显式检查 header 补刷新（保留 HX-Trigger 主链路，不重复派发 toast）
+  document.addEventListener("htmx:afterRequest", (e) => {
+    const xhr = e.detail && e.detail.xhr;
+    if (!xhr || !xhr.getResponseHeader) return;
+    const hdr = xhr.getResponseHeader("HX-Trigger") || xhr.getResponseHeader("hx-trigger");
+    if (!hdr) return;
+    // 若 document 已收到 gridChanged/detailReload，则 htmx 已派发，无需兜底；通过检查 header 中是否含对应键且当前未触发来补
+    // 为避免重复 toast，此处不派发 toast，仅补网格/详情刷新
+    let data = null;
+    try { data = JSON.parse(hdr); } catch (_) {
+      if (hdr.includes("gridChanged")) refreshGrid();
+      if (hdr.includes("detailReload")) document.dispatchEvent(new CustomEvent("detailReload"));
+      if (hdr.includes("detailClosed")) document.dispatchEvent(new CustomEvent("detailClosed"));
+      return;
+    }
+    // 仅当 htmx 未派发时兜底：通过临时标记避免双触发（hmtx:afterRequest 在 gridChanged 之后触发，若已刷新则 xhr 的 header 仍会进入此分支，需去重）
+    // 简单去重：若 header 含 toast，说明原生已派发 toast，无需再处理；仅补网格/详情
+    if (data.gridChanged) {
+      // 若原生已触发，refreshGrid 已调用，此处再次调用幂等（GET 幂等），保留以覆盖未冒泡场景
+      refreshGrid();
+    }
+    if (data.detailReload) document.dispatchEvent(new CustomEvent("detailReload"));
+    if (data.detailClosed) document.dispatchEvent(new CustomEvent("detailClosed"));
+  });
 
   // ---------- 详情抽屉 ----------
   const drawer = $("#detail-drawer");
