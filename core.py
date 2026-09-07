@@ -66,7 +66,8 @@ DEFAULT_PROMPTS = {
 
 # 训练场景预设提示词（训练目标 × 格式 × 输出语言）
 # 依据 LoRA 数据集打标规范整理（见设计文档 11.3 与参考来源）：
-# - 角色：省略固定身份特征（脸/瞳/发/体型，交给触发词吸收），保留服装/姿势/表情/镜头距离与角度/背景/光线，元素顺序一致；
+# - 角色：自然语言版句子以镜头开头、触发词嵌在人物称谓后；发型发色必须描述，其余固定
+#   身份特征（脸型/瞳色/肤色/体型）交给触发词吸收，保留服装/姿势/表情/镜头距离与角度/背景/光线，元素顺序一致；
 #   可见的临时性特征（液体、湿发、泪水等）只要出现必须打标，防止被固化为角色特征（头发干湿尤其如此）；
 # - 服装：服装是主体，具体描述款式/颜色/面料/版型/细节/褶皱，穿者泛化；
 # - 风格：打「内容」不打「风格」，风格词至多 2-3 个稳定词，禁质量词。
@@ -107,42 +108,48 @@ TRAINING_PROMPTS = {
         "natural": {
             "en": (
                 "You are a captioning assistant for CHARACTER LoRA training datasets. "
-                "Write ONE natural-language caption (15-35 words) with this fixed element order: "
-                "trigger token first, then media type, shot distance and camera angle of a "
-                "man/woman, clothing, pose/action, expression, visible transient states "
-                "(liquids, wet hair - only when present), background/setting, lighting. "
-                "OMIT identity features "
-                "fixed across the dataset (face, eye/hair color, skin, body type) so the trigger "
-                "absorbs them. ALWAYS mention transient scene-conditional features when "
-                "visible: liquids (sweat, water drops, rain, oil, blood, ...) and other "
-                "temporary states (tears, blush, dirt, bandages, ...). Wet hair MUST be "
-                "stated explicitly - hair is identity, so untagged wetness gets baked into "
-                "the character. These are NOT identity; describing them keeps them separate "
-                "from the trigger. Keep the same element order in every caption; plain factual "
+                "Write ONE natural-language caption (20-45 words) that starts with the "
+                "shot itself, e.g. 'A high-angle close-up photo of ...'. Embed the trigger "
+                "token inside the person noun phrase (e.g. '... a woman <name> in ...'), "
+                "never at the very start or end. Fixed element order: media/shot type and "
+                "camera angle, person phrase with the trigger token, clothing details, "
+                "hair (length, color and style - ALWAYS describe hair), pose/action, "
+                "expression, visible transient states (liquids, wet hair - only when "
+                "present), background/setting, lighting and the mood it creates. "
+                "OMIT other identity features fixed across the dataset (face shape, eye "
+                "color, skin, body type) so the trigger absorbs them. ALWAYS mention "
+                "transient scene-conditional features when visible: liquids (sweat, water "
+                "drops, rain, oil, blood, ...) and other temporary states (tears, blush, "
+                "dirt, bandages, ...). Wet hair MUST be stated explicitly - hair "
+                "wetness is a transient state, so untagged wetness gets baked into the "
+                "character. Keep the same element order in every caption; plain factual "
                 "English, no poetic language and no quality words. "
-                "Example (format only): '<name>, a low-angle medium shot of a man in a dark "
-                "police uniform with a blue shirt, standing in a kitchen with hands on hips "
-                "and a stern expression, beads of sweat on his forehead, warm interior "
-                "lighting.' Output only the caption."
+                "Example (format only): 'A high-angle close-up photo of a woman <name> in "
+                "a black short-sleeve top and white shorts, with long black hair swept "
+                "back from her forehead and falling over her shoulders, leaning forward "
+                "and smiling up at the camera, plain white background, soft even studio "
+                "lighting creating a clean minimal studio mood.' Output only the caption."
             ),
             "zh": (
                 "你是角色 LoRA 训练数据集的打标助手。用中文输出一句通顺、完整的自然语言"
                 "描述句，要求：必须是一句带标点的全句话（逗号、句号齐备），按中文语法连接"
-                "，禁止输出关键词列表或没有标点的标签串；句子以角色名（触发词）开头，随后"
-                "按固定顺序组织：媒介、镜头距离与角度（如 低角度半身照）、服装细节、姿势"
-                "动作、表情、临时状态（液体、湿发等，仅可见时提及）、背景场景、光线；省略"
-                "数据集中固定的身份特征（脸型、瞳色、发色、肤色、体型），让触发词吸收；"
-                "身上可见的临时状态必须写明：液体（汗珠、水珠、雨水、油、血迹等）及其它"
-                "随场景变化的状态（泪水、脸红、泥污、绷带等）；头发干湿变化必须写「湿发」"
-                "——头发属于身份特征，不写会被固化成角色的永久特征。这些是临时状态、"
-                "不属于角色身份，写出来才能与触发词分离。"
-                "每张图保持相同句式与元素顺序，简明客观，20-45 字，不用修饰性语言和质量词。"
-                "句式参考（按此骨架组织，填入每张图的实际内容）："
-                "「<角色名>，一张<镜头距离与角度>，身穿<服装细节>，<姿势动作>，<表情>，"
-                "<临时状态，仅可见时>，站在<背景场景>，<光线>。」参考成品示例（仅示意句式"
-                "与标点）："
-                "「角色名，一张低角度半身照，身穿蓝白女仆装，双手叉腰，微笑，额角挂着汗珠，"
-                "站在白色影棚背景前，柔光照明。」只输出这一句话，不要解释。"
+                "，禁止输出关键词列表或没有标点的标签串；句子以「一张<镜头距离与角度>照片，"
+                "照片中一位…」开头，角色名（触发词）必须嵌在人物称谓之后（如「…的女子"
+                "<角色名>，…」），不要放在句首或句尾，随后按固定顺序组织：服装细节、"
+                "发型发色（必须描述，如「露额黑色披肩长发」）、姿势动作、表情、临时状态"
+                "（液体、湿发等，仅可见时提及）、背景场景、光线及其营造的氛围；省略数据集"
+                "中其余固定的身份特征（脸型、瞳色、肤色、体型），让触发词吸收；身上可见的"
+                "临时状态必须写明：液体（汗珠、水珠、雨水、油、血迹等）及其它随场景变化的"
+                "状态（泪水、脸红、泥污、绷带等）；头发干湿变化必须写「湿发」——头发干湿"
+                "属于临时状态，不写会被固化成角色的永久特征。这些是临时状态、不属于角色"
+                "身份，写出来才能与触发词分离。每张图保持相同句式与元素顺序，简明客观，"
+                "不用修饰性语言和质量词。句式参考（按此骨架组织，填入每张图的实际内容）："
+                "「一张<镜头距离与角度>照片，照片中一位身穿<服装细节>的<性别称谓><角色名>，"
+                "着一头<发型发色>，她<姿势动作>，<表情>，<临时状态，仅可见时>，背景为"
+                "<背景场景>，<光线>营造出<氛围>。」参考成品示例（仅示意句式与标点）："
+                "「一张高角度特写照片，照片中一位身穿黑色短袖上衣、白色短裤的女子jinjing，"
+                "着一头露额黑色披肩长发，她身体前倾，抬头微微一笑，背景为纯白色，柔和均匀"
+                "的灯光营造出一种简洁的影棚氛围。」只输出这一句话，不要解释。"
             ),
         },
     },
@@ -697,10 +704,13 @@ def resolve_prompt_text(preset: str | None = None) -> str:
     name = (state.settings.get("character_name") or "").strip()
     if target == "character" and name:
         if lang == "en":
-            text += (f" The character is named '{name}'; always refer to the character as "
-                     f"'{name}' and start every output with it.")
+            text += (f" The character is named '{name}'; embed the name inside the person "
+                     f"noun phrase (e.g. 'a woman {name} in ...') and use only this name; "
+                     f"any placeholder name in the example must be replaced with '{name}'.")
         else:
-            text += f" 角色的名称为「{name}」，句首必须以「{name}」称呼角色，整句只用这一个名字。"
+            text += (f" 角色的名称为「{name}」，必须嵌在人物称谓之后描述"
+                     f"（如「…的女子{name}，…」），整句只用这一个名字；"
+                     f"示例中的角色名仅为占位，实际输出一律替换为「{name}」。")
     return text
 
 
