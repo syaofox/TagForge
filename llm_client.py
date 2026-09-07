@@ -11,6 +11,7 @@ import asyncio
 import base64
 import io
 import time
+import uuid
 
 import httpx
 from PIL import Image
@@ -35,11 +36,18 @@ class LLMClient:
 
     def __init__(self, api_key: str, base_url: str, model_name: str) -> None:
         self.model = model_name
+        # OpenCode Go 等网关要求每次会话携带稳定会话标识（x-opencode-session），
+        # 并用自有 User-Agent 标识客户端；普通 OpenAI 兼容端点会忽略这些头，无副作用。
+        self.session_id = uuid.uuid4().hex
         self.client = AsyncOpenAI(
             api_key=api_key,
             base_url=base_url or None,
             timeout=httpx.Timeout(90.0, connect=10.0),
             max_retries=0,  # 重试逻辑由本类自行控制
+            default_headers={
+                "x-opencode-session": self.session_id,
+                "User-Agent": "tagforge/1.0",
+            },
         )
         self.total_prompt_tokens = 0
         self.total_completion_tokens = 0
