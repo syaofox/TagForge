@@ -224,7 +224,7 @@ button, input, select, textarea { font: inherit; }
 .tf-card:hover { border-color: var(--tf-border-strong); box-shadow: var(--tf-shadow-sm); }
 .tf-card--tagged { border-color: color-mix(in srgb, var(--tf-status-tagged) 35%, var(--tf-border)); }
 .tf-card--failed { border-color: color-mix(in srgb, var(--tf-status-failed) 45%, var(--tf-border)); }
-.tf-card-img { width: 100%; height: 126px; object-fit: cover; display: block; background: #e6eef0; }
+.tf-card-img { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; display: block; background: #e6eef0; }
 :root[data-theme="dark"] .tf-card-img { background: #1a2f35; }
 .tf-card-caption {
   font-size: 11px; line-height: 1.45; color: var(--tf-muted);
